@@ -12,9 +12,10 @@ then ``split`` on the same file, the second run should be instant. So the
 (or ``$XDG_CACHE_HOME/scoresplit/...`` if that environment variable is set,
 the Linux standard for cache folders).
 
-The file name includes ANALYSIS_VERSION and the OCR settings, so changing
-the analysis code (bump the version!) or the OCR language automatically
-ignores old cache files. Deleting the folder is always safe.
+The file name includes ANALYSIS_VERSION and the OCR settings (including
+whether Tesseract was installed), so changing the analysis code (bump the
+version!), the OCR language or installing Tesseract automatically ignores
+old cache files. Deleting the folder is always safe.
 """
 
 from __future__ import annotations

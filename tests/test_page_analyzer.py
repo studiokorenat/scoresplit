@@ -98,6 +98,54 @@ def test_a_page_with_only_a_stamp_is_read_as_a_scan(tmp_path: Path, monkeypatch)
 
 
 # ---------------------------------------------------------------------------
+# The cache key knows whether Tesseract was there (review step 5)
+#
+# On a text page the header is OCR'd as well, but only when Tesseract is
+# installed. Results made without Tesseract must not be read back from the
+# cache once it is installed, so the cache key includes it.
+# ---------------------------------------------------------------------------
+
+
+def test_the_cache_key_changes_when_tesseract_comes_or_goes() -> None:
+    with_ocr = AnalysisSettings(ocr_mode="auto", ocr_available=True)
+    without_ocr = AnalysisSettings(ocr_mode="auto", ocr_available=False)
+    assert with_ocr.cache_key() != without_ocr.cache_key()
+
+
+def test_with_ocr_off_tesseract_does_not_matter_for_the_cache_key() -> None:
+    # ocr_mode "never" never runs Tesseract, so both results are the same.
+    with_ocr = AnalysisSettings(ocr_mode="never", ocr_available=True)
+    without_ocr = AnalysisSettings(ocr_mode="never", ocr_available=False)
+    assert with_ocr.cache_key() == without_ocr.cache_key()
+
+
+def test_ocr_available_is_filled_in_from_the_system(monkeypatch) -> None:
+    # Left out, ocr_available asks tesseract_available() when the settings
+    # are made, so every caller gets the right value without passing it.
+    monkeypatch.setattr(page_analyzer, "tesseract_available", lambda: False)
+    assert AnalysisSettings().ocr_available is False
+    monkeypatch.setattr(page_analyzer, "tesseract_available", lambda: True)
+    assert AnalysisSettings().ocr_available is True
+
+
+def test_results_without_tesseract_are_not_reused_with_it(tmp_path: Path, monkeypatch) -> None:
+    # Analyse the same PDF twice, first "without" and then "with" Tesseract:
+    # the second run must write its own cache file, not read the first one.
+    # (The page is blank, so no OCR really runs.)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    _blank_pdf(tmp_path).close()
+    pdf_path = tmp_path / "blank.pdf"
+    sha = "0" * 64  # any fingerprint will do: it only names the cache folder
+
+    for available in (False, True):
+        settings = AnalysisSettings(ocr_mode="auto", ocr_available=available)
+        page_analyzer.analyze_document(pdf_path, sha, settings, workers=1)
+
+    cache_files = list((tmp_path / "cache").rglob("*.json"))
+    assert len(cache_files) == 2
+
+
+# ---------------------------------------------------------------------------
 # A scan with a text layer: our own OCR of the header (round 9.9)
 #
 # superstar.pdf is a scan whose text layer is the scanner's own, garbled OCR

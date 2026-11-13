@@ -33,7 +33,7 @@ from __future__ import annotations
 import os
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -121,10 +121,22 @@ class AnalysisSettings:
     ocr_mode: str = "auto"  # "auto" (only scans), "always", or "never"
     lang: str = "eng"  # Tesseract language string, e.g. "eng+hrv"
     dpi: int = DEFAULT_DPI
+    # Can Tesseract be used? A text page's header is OCR'd as well only when
+    # it can (see analyze_page), so the results differ, and the cache key
+    # must tell them apart (review step 5).
+    # Left out, it is asked from the system when the settings are made.
+    # field(default_factory=...) calls the function for every new object
+    # (a plain "= tesseract_available()" would run once, at import). The
+    # lambda looks the function up at that moment, so tests can replace it.
+    ocr_available: bool = field(default_factory=lambda: tesseract_available())
 
     def cache_key(self) -> str:
         """A short text identifying these settings, used in the cache file name."""
-        return f"{self.ocr_mode}-{self.lang}-{self.dpi}"
+        key = f"{self.ocr_mode}-{self.lang}-{self.dpi}"
+        # With OCR off, Tesseract is never run, so it doesn't matter.
+        if self.ocr_mode == "never":
+            return key
+        return key + ("-ocr" if self.ocr_available else "-noocr")
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +311,9 @@ def read_header_again(
         and bool(staves)
         and _count_instruments(facts.margin) < SCORE_MARGIN_MIN_INSTRUMENTS
         and largest_image_share(page) >= SCANNED_PAGE_MIN_IMAGE_SHARE
-        and tesseract_available()
+        # The setting, not tesseract_available(): then the cache key and
+        # what the analysis did always agree.
+        and settings.ocr_available
     )
 
 
@@ -374,7 +388,7 @@ def analyze_page(
             and staves
             and has_credits(facts.header)
             and not _has_part_name(facts.header)
-            and tesseract_available()
+            and settings.ocr_available
         ):
             facts.header += ocr_region(gray, header_region, dpi, psm=11, lang=settings.lang)
         # A scan with a text layer: the scanner's OCR may have garbled the
@@ -392,7 +406,7 @@ def analyze_page(
     if facts.ink_ratio < BLANK_INK_RATIO:
         return facts  # blank page: nothing to read
 
-    if not tesseract_available():
+    if not settings.ocr_available:
         raise OcrUnavailableError(
             f"page {page_number} is a scanned image and needs OCR, but the "
             "'tesseract' program is not installed"
