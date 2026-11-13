@@ -6,6 +6,8 @@ same-name parts with different music).
 Pages and images are built by hand, so no PDF is needed.
 """
 
+import warnings
+
 import numpy as np
 
 from scoresplit.classify import classify_page, fix_clef_sign_numbers, is_sentence
@@ -440,6 +442,29 @@ def test_a_treble_clef_is_one_stroke_out_of_the_staff() -> None:
     _treble(page, 100)
     staves, threshold = find_staves_on_page(page)
     assert detect_clef(page, staves, threshold) == "treble"
+
+
+def test_a_staff_at_the_left_edge_of_the_page_gets_its_clef() -> None:
+    # Buffalo Dances pages 41 and 104: the scan is cut so tightly that the
+    # staff lines start in column 0. The clef area starts a little left of
+    # the staff, at column -1, and in Python ink[:, -1:26] means "from the
+    # LAST column to 26": an empty slice, whose mean is NaN (with a
+    # "Mean of empty slice" warning).
+    page = _page()
+    top = 100
+    for i in range(5):
+        page[top + i * SPACING : top + i * SPACING + 2, 0:560] = 0
+    # A treble clef that starts right at the edge: a stroke from above the
+    # staff into its top two spaces, and its tail below the staff. (One
+    # stroke through all four spaces would look like a barline.)
+    page[top - int(1.5 * SPACING) : top + 26, 0:3] = 0
+    page[top + 4 * SPACING + 5 : top + 4 * SPACING + 19, 0:3] = 0
+    staves, threshold = find_staves_on_page(page)
+    # catch_warnings() puts the warning settings back afterwards;
+    # simplefilter("error") turns every warning inside into an error.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert detect_clef(page, staves, threshold) == "treble"
 
 
 def test_a_rehearsal_mark_above_a_clef_is_no_treble_clef() -> None:

@@ -460,8 +460,12 @@ def _clef_of_staff(
     if _has_bass_dots(ink, lines, spaces, clef_start, spacing, light_scan):
         return "bass"
 
-    col_from = int(clef_start + CLEF_X_RANGE[0] * spacing)
-    col_to = int(clef_start + CLEF_X_RANGE[1] * spacing)
+    # The clef's columns start a little LEFT of clef_start. Keep them on the
+    # page: when a staff starts in column 0 (a tightly cut scan), col_from
+    # would be -1, and ink[:, -1:26] means "from the LAST column to 26",
+    # an empty slice (its mean is NaN, and the clef was missed).
+    col_from = max(0, int(clef_start + CLEF_X_RANGE[0] * spacing))
+    col_to = min(ink.shape[1], int(clef_start + CLEF_X_RANGE[1] * spacing))
     top_line, bottom_line = lines[0], lines[4]
 
     def ink_between(row_from: float, row_to: float) -> float:

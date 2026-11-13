@@ -49,7 +49,9 @@ from .models import PageFacts, TextSpan
 # 20: control characters in read text become a space (tidy_text), so a
 #     name never holds a "\x03" (review step 3).
 # 21: the C1 control characters (\x80-\x9f) too.
-ANALYSIS_VERSION = 21
+# 22: a clef at the very left edge of the page (staff starting in column 0)
+#     is measured, not missed (Buffalo Dances pages 41 and 104).
+ANALYSIS_VERSION = 22
 
 
 def file_sha256(path: Path) -> str:
