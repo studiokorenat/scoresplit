@@ -42,7 +42,7 @@ import argparse
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -421,16 +421,43 @@ def score(golden: dict, actual: dict) -> Score:
     return result
 
 
+def golden_part_names(golden: dict) -> list[str]:
+    """
+    One name per golden part (in the same order) that no other part has.
+
+    Usually this is just part_label(). But a golden file can hold two copies
+    of the same part (deep_purple has "Bass in Bb (bass clef)" at pages
+    82-83 and again at 84-85). Those would get the same label, so a page put
+    in the wrong copy would still look right. Labels that appear more than
+    once get ", copy 1", ", copy 2", ... added, in golden-file order.
+    """
+    labels = [part_label(part) for part in golden["parts"]]
+    # How often each label appears: Counter(["a", "b", "a"]) -> {"a": 2, "b": 1}.
+    how_often = Counter(labels)
+    copies_so_far: dict[str, int] = defaultdict(int)
+    names = []
+    for label in labels:
+        if how_often[label] == 1:
+            names.append(label)
+        else:
+            copies_so_far[label] += 1
+            names.append(f"{label}, copy {copies_so_far[label]}")
+    return names
+
+
 def _where_each_page_goes(data: dict, to_golden: dict[int, int], golden: dict) -> dict[int, str]:
     """
     {page number: where it goes} for a golden file or a detection result.
-    `to_golden` maps a part's index to the index of its golden part; a part
-    without one gets its own label with "(not in golden file)".
+    `to_golden` maps a part's index to the index of its golden part; such a
+    part gets that golden part's unique name (see golden_part_names()), so
+    two copies of the same part are told apart. A part without a golden part
+    gets its own label with "(not in golden file)".
     """
+    names = golden_part_names(golden)
     where: dict[int, str] = {}
     for index, part in enumerate(data["parts"]):
         if index in to_golden:
-            label = part_label(golden["parts"][to_golden[index]])
+            label = names[to_golden[index]]
         else:
             label = f"{part_label(part)} (not in golden file)"
         for page in parse_page_ranges(part["pages"]):

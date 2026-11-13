@@ -85,6 +85,39 @@ def test_a_part_cut_in_two_gives_one_extra_part() -> None:
     assert "extra part: Oboe in C (treble clef) (pages 5)" in score.differences
 
 
+# Two copies of the same part (same label), like deep_purple's
+# "Bass in Bb (bass clef)" at pages 82-83 and again at 84-85.
+TWO_COPIES = result(
+    [
+        part("bass", "2-3", key="Bb", clef="bass"),
+        part("bass", "4-5", key="Bb", clef="bass"),
+    ],
+)
+
+
+def test_two_copies_of_a_part_that_match_exactly_score_every_page() -> None:
+    score = precision.score(TWO_COPIES, TWO_COPIES)
+    assert score.pages_right == score.pages_total == 4
+    assert score.differences == []
+
+
+def test_a_page_in_the_wrong_copy_of_a_part_counts_as_wrong() -> None:
+    # Page 4 belongs to the second copy, but detection put it in the first.
+    actual = result(
+        [
+            part("bass", "2-4", key="Bb", clef="bass"),
+            part("bass", "5", key="Bb", clef="bass"),
+        ],
+    )
+    score = precision.score(TWO_COPIES, actual)
+    assert score.pages_right == 3
+    # The message tells the two copies apart.
+    assert (
+        "pages 4: expected Bass in Bb (bass clef), copy 2, "
+        "got Bass in Bb (bass clef), copy 1"
+    ) in score.differences
+
+
 def test_wrong_key_clef_export_and_credits_are_counted() -> None:
     actual = result(
         [
