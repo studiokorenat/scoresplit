@@ -49,7 +49,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from scoresplit.instruments import load_dictionary
+from scoresplit.instruments import CANONICAL_KEYS, load_dictionary
 from scoresplit.models import Result, format_page_ranges, parse_page_ranges
 from scoresplit.ocr import tesseract_available
 from scoresplit.page_analyzer import AnalysisSettings
@@ -70,6 +70,11 @@ SCORE_ID = "score"
 # The values a golden file may use (checked by golden_problems).
 CLEFS = {"treble", "bass", "alto", "tenor", "percussion", None}
 EXTRA_REASONS = {"cover", "blank", "unassigned"}
+
+# The fields every part and every extra in a golden file must have: the
+# scoring reads all of them (checked by golden_problems).
+GOLDEN_PART_FIELDS = ("name", "instrument", "number", "key", "clef", "pages", "export")
+GOLDEN_EXTRA_FIELDS = ("reason", "pages")
 
 # The counts stored in the baseline. For all of them higher is better,
 # except parts_extra (parts that shouldn't exist), where lower is better.
@@ -120,29 +125,62 @@ def load_golden(path: Path) -> dict:
 def golden_problems(golden: dict, page_count: int) -> list[str]:
     """
     Mistakes in a (hand-edited) golden file, as readable sentences, or an
-    empty list. Every page of the PDF must be in exactly one part or extra,
-    and the instrument ids, clefs and extra reasons must be ones scoresplit
-    knows, so a typo can't silently lower a score.
+    empty list. Every part and extra must have all its fields, every page
+    of the PDF must be in exactly one part or extra, and the instrument
+    ids, keys, clefs and extra reasons must be ones scoresplit knows, so a
+    typo can't silently lower a score (or crash the scoring).
     """
     problems = []
     instruments = load_dictionary().by_id
 
     owners: dict[int, int] = defaultdict(int)  # page -> how many places list it
-    for part in golden["parts"]:
+
+    def count_pages(label: str, pages: str) -> None:
+        """Count each page of ``pages`` in owners, or report pages that can't be read."""
+        try:
+            for page in parse_page_ranges(pages):
+                owners[page] += 1
+        except (ValueError, TypeError) as error:
+            # "3-1", "x" or a number instead of text: parse_page_ranges refuses it.
+            problems.append(f"{label}: pages {pages!r} can't be read ({error})")
+
+    # enumerate(..., start=1) counts the parts 1, 2, 3 ... as a person would.
+    for position, part in enumerate(golden["parts"], start=1):
+        # First check that every field is there: everything below (and the
+        # scoring) reads them, and a missing one would crash with a KeyError.
+        missing = [name for name in GOLDEN_PART_FIELDS if name not in part]
+        if missing:
+            for name in missing:
+                problems.append(f"part {position} ({part.get('name')!r}): no {name!r} field")
+            continue  # skip the other checks for this part
         label = part_label(part)
-        if not part.get("name"):
+        if not part["name"]:
             problems.append(f"{label}: no name")
         if part["instrument"] != SCORE_ID and part["instrument"] not in instruments:
             problems.append(f"{label}: unknown instrument id {part['instrument']!r}")
+        # The number is text ("1", "1&2", "Solo"), like scoresplit writes it.
+        if part["number"] is not None and (not isinstance(part["number"], str) or not part["number"].strip()):
+            problems.append(f"{label}: number must be text like \"1\" or null, not {part['number']!r}")
+        # A key must be spelled the way scoresplit spells it ("Bb", not "B♭").
+        if part["key"] is not None and part["key"] not in CANONICAL_KEYS:
+            problems.append(f"{label}: unknown key {part['key']!r} (known: {', '.join(sorted(CANONICAL_KEYS))})")
         if part["clef"] not in CLEFS:
             problems.append(f"{label}: unknown clef {part['clef']!r}")
-        for page in parse_page_ranges(part["pages"]):
-            owners[page] += 1
-    for extra in golden["extra"]:
+        # isinstance(x, bool) is True only for true and false, not for "yes" or 1.
+        if not isinstance(part["export"], bool):
+            problems.append(f"{label}: export must be true or false, not {part['export']!r}")
+        count_pages(label, part["pages"])
+
+    for position, extra in enumerate(golden["extra"], start=1):
+        missing = [name for name in GOLDEN_EXTRA_FIELDS if name not in extra]
+        if missing:
+            for name in missing:
+                problems.append(f"extra {position}: no {name!r} field")
+            continue
+        label = f"extra pages {extra['pages']}"
         if extra["reason"] not in EXTRA_REASONS:
-            problems.append(f"extra pages {extra['pages']}: unknown reason {extra['reason']!r}")
-        for page in parse_page_ranges(extra["pages"]):
-            owners[page] += 1
+            problems.append(f"{label}: unknown reason {extra['reason']!r}")
+        count_pages(label, extra["pages"])
 
     all_pages = set(range(1, page_count + 1))
     missing = sorted(all_pages - set(owners))

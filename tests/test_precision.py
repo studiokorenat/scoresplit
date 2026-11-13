@@ -6,6 +6,8 @@ so it must count right.
 
 import precision
 
+from scoresplit.models import parse_page_ranges
+
 
 def part(instrument, pages, number=None, key=None, clef="treble", export=True, name=None):
     """Helper: one part in golden-file shape. The name defaults to "flute 1"."""
@@ -189,6 +191,51 @@ def test_golden_problems_finds_gaps_overlaps_and_typos() -> None:
     assert "pages 3 are listed more than once" in problems
     assert "pages 6 don't exist (the PDF has 5)" in problems
     assert precision.golden_problems(GOLDEN, page_count=7) == []
+
+
+def test_golden_problems_finds_a_key_typo() -> None:
+    # "B♭" isn't how scoresplit writes a key ("Bb" is), so it could never match.
+    golden = result([part("clarinet", "1", number="1", key="B♭")])
+    problems = precision.golden_problems(golden, page_count=1)
+    assert any("Clarinet 1" in p and "unknown key 'B♭'" in p for p in problems)
+
+
+def test_golden_problems_finds_a_wrong_number_and_export() -> None:
+    golden = result(
+        [part("flute", "1", number=1, key="C", name="Flute 1"), part("oboe", "2", key="C", export="yes")]
+    )
+    problems = precision.golden_problems(golden, page_count=2)
+    assert any("number must be text" in p for p in problems)
+    assert any("export must be true or false" in p and "'yes'" in p for p in problems)
+
+
+def test_golden_problems_reports_a_missing_field_instead_of_crashing() -> None:
+    flute = part("flute", "1", number="1", key="C")
+    del flute["number"]
+    problems = precision.golden_problems(
+        result([flute], extra=[{"reason": "cover"}]), page_count=1
+    )
+    assert "part 1 ('flute 1'): no 'number' field" in problems
+    assert "extra 1: no 'pages' field" in problems
+
+
+def test_golden_problems_reports_unreadable_pages() -> None:
+    problems = precision.golden_problems(result([part("flute", "3-1", key="C")]), page_count=3)
+    assert any("Flute" in p and "goes backwards" in p for p in problems)
+
+
+def test_the_real_golden_files_have_no_problems() -> None:
+    # The PDFs aren't read here (that is slow): the page count is taken from
+    # the highest page the golden file lists. test_examples.py checks against
+    # the real page count.
+    for path in precision.golden_files():
+        golden = precision.load_golden(path)
+        listed = [
+            page
+            for entry in golden["parts"] + golden["extra"]
+            for page in parse_page_ranges(entry["pages"])
+        ]
+        assert precision.golden_problems(golden, max(listed)) == [], path.name
 
 
 def test_drops_compares_with_the_baseline() -> None:
