@@ -207,10 +207,14 @@ def test_the_json_export_reads_back_as_the_same_result(tmp_path: Path) -> None:
     target, _ = export_parts(result, pdf, tmp_path / "out")
     data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
     # model_validate builds a Result from the JSON; the duplicate is in it too.
+    # The added "file" keys are ignored, so the JSON works as --edits.
     assert Result.model_validate(data) == result
+    assert data["parts"][1]["file"] == "02_Song_&_Dance_A_Person_Flute_1_C_tc_pages_4-5.pdf"
+    assert data["parts"][3]["file"] == ""  # the duplicate wasn't written
+    assert data["extra"][0] == {"reason": "cover", "pages": "1", "file": "extra/cover_pages_1.pdf"}
 
 
-def test_the_csv_export_has_one_row_per_part(tmp_path: Path) -> None:
+def test_the_csv_export_has_one_row_per_part_and_extra_group(tmp_path: Path) -> None:
     pdf, result = _example(tmp_path)
     target, _ = export_parts(result, pdf, tmp_path / "out")
     # "utf-8-sig" reads past the marker the CSV starts with (for Excel).
@@ -218,18 +222,27 @@ def test_the_csv_export_has_one_row_per_part(tmp_path: Path) -> None:
         rows = list(csv.DictReader(handle))
 
     assert list(rows[0]) == [
-        "name", "instrument", "number", "key", "key_assumed",
-        "clef", "clef_assumed", "kind", "pages", "export", "file",
+        "name", "instrument", "number", "key", "key_assumed", "clef", "clef_assumed",
+        "kind", "pages", "export", "duplicate_of", "confidence", "notes", "file",
+        "schema_version", "source", "sha256", "page_count", "ocr_pages",
+        "title", "composer", "arranger", "warnings",
     ]
-    assert rows[0] == {
-        "name": "Conductor Score", "instrument": "", "number": "", "key": "",
-        "key_assumed": "false", "clef": "", "clef_assumed": "false", "kind": "score", "pages": "2-3",
-        "export": "true", "file": "01_Song_&_Dance_A_Person_Conductor_Score_pages_2-3.pdf",
-    }
+    assert rows[0]["name"] == "Conductor Score"
+    assert rows[0]["file"] == "01_Song_&_Dance_A_Person_Conductor_Score_pages_2-3.pdf"
+    assert rows[0]["confidence"] == "1.0"
+    # The credits are on every row.
+    assert {row["title"] for row in rows} == {"Song & Dance"}
     assert rows[1]["key"] == "C" and rows[1]["key_assumed"] == "true"
-    # The duplicate is listed, but wasn't written: no file.
-    assert [row["name"] for row in rows] == ["Conductor Score", "Flute 1", "2. klarinet in Es", "2. klarinet in Es"]
+    # The duplicate is listed, with its note, but wasn't written: no file.
     assert (rows[3]["export"], rows[3]["file"]) == ("false", "")
+    assert rows[3]["duplicate_of"] == "2. klarinet in Es"
+    assert rows[3]["notes"] == "duplicate of '2. klarinet in Es' (pages 6-7)"
+    # After the parts, one row per group of extra pages.
+    assert [(row["kind"], row["name"], row["pages"], row["file"]) for row in rows[4:]] == [
+        ("cover", "Cover", "1", "extra/cover_pages_1.pdf"),
+        ("unassigned", "Unassigned", "9", "extra/unassigned_pages_9.pdf"),
+        ("blank", "Blank", "10", "extra/blank_pages_10.pdf"),
+    ]
     # Every listed file exists, relative to the main folder.
     assert all((target / row["file"]).is_file() for row in rows if row["file"])
 
@@ -245,6 +258,7 @@ def test_the_xml_export_holds_the_credits_parts_and_extra_pages(tmp_path: Path) 
     assert root.findtext("title") == "Song & Dance"  # "&" written as "&amp;" and read back
     assert root.findtext("arranger") == "A. Person"
     assert root.findtext("composer") == ""
+    assert root.findtext("ocr_pages") == "0"
 
     parts = root.findall("parts/part")
     assert len(parts) == 4
@@ -252,9 +266,39 @@ def test_the_xml_export_holds_the_credits_parts_and_extra_pages(tmp_path: Path) 
     assert flute == {
         "name": "Flute 1", "instrument": "flute", "number": "1", "key": "C",
         "key_assumed": "true", "clef": "treble", "clef_assumed": "false", "kind": "part", "pages": "4-5",
-        "export": "true", "file": "02_Song_&_Dance_A_Person_Flute_1_C_tc_pages_4-5.pdf",
+        "export": "true", "duplicate_of": "", "confidence": "1.0", "notes": "",
+        "file": "02_Song_&_Dance_A_Person_Flute_1_C_tc_pages_4-5.pdf",
     }
     assert parts[3].findtext("file") == ""  # the duplicate wasn't written
+    assert [note.text for note in parts[3].findall("notes/note")] == [
+        "duplicate of '2. klarinet in Es' (pages 6-7)"
+    ]
 
-    extras = [(pages.get("reason"), pages.text) for pages in root.findall("extra/pages")]
-    assert extras == [("cover", "1"), ("unassigned", "9"), ("blank", "10")]
+    extras = [(pages.get("reason"), pages.text, pages.get("file")) for pages in root.findall("extra/pages")]
+    assert extras == [
+        ("cover", "1", "extra/cover_pages_1.pdf"),
+        ("unassigned", "9", "extra/unassigned_pages_9.pdf"),
+        ("blank", "10", "extra/blank_pages_10.pdf"),
+    ]
+
+
+def test_the_three_export_files_hold_the_same_part_fields(tmp_path: Path) -> None:
+    """JSON, CSV and XML list the same fields for a part: none is missing anywhere."""
+    pdf, result = _example(tmp_path)
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    export = target / "export"
+    json_fields = set(json.loads((export / f"{target.name}.json").read_text(encoding="utf-8"))["parts"][0])
+    with (export / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
+        csv_fields = set(next(csv.DictReader(handle)))
+    xml_fields = {child.tag for child in ET.parse(export / f"{target.name}.xml").getroot().find("parts/part")}
+    assert json_fields == xml_fields
+    assert json_fields <= csv_fields  # the CSV adds the credits to every row
+
+
+def test_extra_pages_not_written_are_still_listed_without_a_file(tmp_path: Path) -> None:
+    pdf, result = _example(tmp_path)
+    target, _ = export_parts(result, pdf, tmp_path / "out", include_extra=False)
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+    assert [(extra["reason"], extra["file"]) for extra in data["extra"]] == [
+        ("cover", ""), ("unassigned", ""), ("blank", ""),
+    ]

@@ -212,7 +212,10 @@ named `<Title> - <Arranger>` (the composer when there is no arranger):
 - **`extra/`**: the pages that are in no part, named by their reason:
   `cover_pages_1-2.pdf`, `blank_pages_237-238.pdf`.
 - **`export/`**: the parts as **JSON**, **CSV** (opens in a spreadsheet)
-  and **XML**, and a copy of the original PDF.
+  and **XML**, and a copy of the original PDF. All three hold the same
+  data: the credits, every part (name, instrument, key, clef, pages,
+  confidence, notes, ...) with its PDF file name, the extra pages and the
+  warnings. Delete what you don't need.
 
 The pages are copied as they are, so the quality is the same as the
 original. If the folder already exists and is not empty, scoresplit stops
