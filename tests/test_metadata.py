@@ -52,6 +52,11 @@ def test_title_and_arranger_on_one_line() -> None:
     line = tidy_text("DEEP PURPLE MEDLEYarr. Toshihiko Sahashi")
     assert line == "DEEP PURPLE MEDLEY arr. Toshihiko Sahashi"
     assert tidy_text("Barr  CARRY") == "Barr CARRY"  # real words are not cut
+    # A control character (a text layer without a proper font map gives
+    # "\x03"-like letters) becomes a space, so two words don't stick together.
+    assert tidy_text("Flute\x03 1") == "Flute 1"
+    assert tidy_text("Flute\x031") == "Flute 1"
+    assert tidy_text("\x00Oboe\x7f") == "Oboe"
     page = PageFacts(
         page_number=40,
         source="text",

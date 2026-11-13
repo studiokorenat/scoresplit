@@ -453,6 +453,25 @@ def _write_csv(data: dict, path: Path) -> None:
             writer.writerow({column: _cell(row.get(column)) for column in CSV_COLUMNS})
 
 
+# The characters XML 1.0 doesn't allow anywhere, not even escaped: the
+# control characters except tab (\x09), newline (\x0a) and \x0d; the halves
+# of a broken letter (\ud800-\udfff); and ￾, ￿.
+XML_FORBIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
+
+
+def _xml_safe(text: str) -> str:
+    """
+    `text` without the characters XML can't hold:
+
+        "Flute\\x0c 1" -> "Flute 1"
+
+    Text read from a PDF is already clean (pdf_reader.tidy_text), but an
+    edits file, a note or a warning may still hold one. Without this the
+    XML file is written, but no program can read it.
+    """
+    return XML_FORBIDDEN.sub("", text)
+
+
 def _write_xml(data: dict, path: Path) -> None:
     """
     The export data as XML:
@@ -469,7 +488,9 @@ def _write_xml(data: dict, path: Path) -> None:
           </extra>
         </scoresplit>
 
-    ElementTree escapes "&" and "<" in the texts by itself.
+    ElementTree escapes "&" and "<" in the texts by itself. Characters XML
+    can't hold at all are removed (see _xml_safe): every text and attribute
+    goes through it.
     """
     root = ET.Element("scoresplit", schema_version=str(data["schema_version"]))
     for field in CREDIT_FIELDS:
@@ -478,9 +499,9 @@ def _write_xml(data: dict, path: Path) -> None:
         if field == "warnings":
             warnings_element = ET.SubElement(root, "warnings")
             for warning in data["warnings"]:
-                ET.SubElement(warnings_element, "warning").text = warning
+                ET.SubElement(warnings_element, "warning").text = _xml_safe(warning)
         else:
-            ET.SubElement(root, field).text = _cell(data[field])
+            ET.SubElement(root, field).text = _xml_safe(_cell(data[field]))
 
     parts_element = ET.SubElement(root, "parts")
     for part in data["parts"]:
@@ -490,13 +511,16 @@ def _write_xml(data: dict, path: Path) -> None:
                 # One <note> per note, instead of one joined text.
                 notes_element = ET.SubElement(part_element, "notes")
                 for note in value:
-                    ET.SubElement(notes_element, "note").text = note
+                    ET.SubElement(notes_element, "note").text = _xml_safe(note)
             else:
-                ET.SubElement(part_element, field).text = _cell(value)
+                ET.SubElement(part_element, field).text = _xml_safe(_cell(value))
 
     extra_element = ET.SubElement(root, "extra")
     for extra in data["extra"]:
-        ET.SubElement(extra_element, "pages", reason=extra["reason"], file=extra["file"]).text = extra["pages"]
+        pages_element = ET.SubElement(
+            extra_element, "pages", reason=_xml_safe(extra["reason"]), file=_xml_safe(extra["file"])
+        )
+        pages_element.text = _xml_safe(extra["pages"])
 
     tree = ET.ElementTree(root)
     ET.indent(tree)  # one element per line, indented: readable by a person

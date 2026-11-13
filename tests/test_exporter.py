@@ -356,6 +356,25 @@ def test_the_xml_export_holds_the_credits_parts_and_extra_pages(tmp_path: Path) 
     ]
 
 
+def test_the_xml_export_parses_whatever_control_characters_the_text_holds(tmp_path: Path) -> None:
+    # XML 1.0 forbids most control characters (\x0c = form feed, \x03 ...).
+    # They can come from a PDF text layer, OCR or an edits file; before,
+    # the XML was written but couldn't be read ("not well-formed").
+    pdf, result = _example(tmp_path)
+    result.title = "Song\x0c & Dance"
+    result.warnings = ["odd\x03 text"]
+    result.parts[1].name = "Flute\x0c 1"
+    result.parts[1].notes = ["read\x1f on page 4"]
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+
+    root = ET.parse(target / "export" / f"{target.name}.xml").getroot()
+    assert root.findtext("title") == "Song & Dance"
+    assert [warning.text for warning in root.findall("warnings/warning")] == ["odd text"]
+    flute = root.findall("parts/part")[1]
+    assert flute.findtext("name") == "Flute 1"
+    assert [note.text for note in flute.findall("notes/note")] == ["read on page 4"]
+
+
 def test_the_three_export_files_hold_the_same_part_fields(tmp_path: Path) -> None:
     """JSON, CSV and XML list the same fields for a part: none is missing anywhere."""
     pdf, result = _example(tmp_path)

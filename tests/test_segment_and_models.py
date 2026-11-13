@@ -470,6 +470,53 @@ def test_the_highest_page_count_still_loads() -> None:
     result = make_result([Part(name="Flute", pages="1")], page_count=MAX_PAGE_NUMBER)
     assert result.extra == [Extra(reason="unassigned", pages=f"2-{MAX_PAGE_NUMBER}")]
 
+
+# --- Control characters in an edits file ----------------------------------------
+
+
+def test_control_characters_in_an_edits_file_are_cleaned_when_loaded() -> None:
+    # "\x1b[31m" would turn the terminal red (or worse) when the table is
+    # printed; "\x9b" is the one-character form of "\x1b[". Every control
+    # character becomes a space, as when text is read from a PDF.
+    data = {
+        "source": "a\x1b[2J.pdf",
+        "sha256": "0" * 64,
+        "page_count": 2,
+        "title": "Song\x07",
+        "composer": "\x9b31mSomeone",
+        "arranger": "A.\x00Person",
+        "warnings": ["odd\x0ctext"],
+        "parts": [
+            {
+                "name": "Flute\x1b[31m 1",
+                "instrument": "flute\x7f",
+                "number": "1\x03",
+                "key": "C\x85",
+                "duplicate_of": "Oboe\x1b",
+                "notes": ["read\x1f on page 4"],
+                "pages": "1-2",
+            }
+        ],
+    }
+    result = Result.model_validate(data)
+    assert (result.source, result.title, result.composer, result.arranger) == (
+        "a [2J.pdf", "Song", "31mSomeone", "A. Person"
+    )
+    assert result.warnings == ["odd text"]
+    part = result.parts[0]
+    assert (part.name, part.instrument, part.number, part.key, part.duplicate_of) == (
+        "Flute [31m 1", "flute", "1", "C", "Oboe"
+    )
+    assert part.notes == ["read on page 4"]
+
+
+def test_clean_text_from_an_edits_file_is_kept_exactly() -> None:
+    # Only text WITH a control character is touched: a name a person typed
+    # with two spaces keeps them.
+    part = Part(name="  Flute  1 ", pages="1")
+    assert part.name == "  Flute  1 "
+    assert Part(name="Flute", key=None, pages="1").key is None
+
 # --- Names as printed ----------------------------------------------------------
 
 

@@ -34,6 +34,7 @@ Pipeline overview (which module produces which model):
 # text, so a class can mention a class defined further down the file.
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
@@ -201,6 +202,41 @@ Clef = Literal["treble", "bass", "alto", "tenor", "percussion"]
 ExtraReason = Literal["cover", "blank", "unassigned"]
 
 
+# Invisible control characters: \x00-\x1f (tab, newline, escape ...), \x7f
+# (delete) and \x80-\x9f (the "C1" ones: "\x9b" works like "\x1b[" in some
+# terminals). One line of text never needs them, and they do harm: XML can't
+# hold most of them, and "\x1b[31m" in a part name would change the
+# terminal when the table is printed. Text read from a PDF goes through
+# pdf_reader.tidy_text; text from an edits file through _clean_text below.
+CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def without_control_characters(text: str) -> str:
+    """
+    `text` with every control character turned into a space, and the spaces
+    tidied (so "Flute\\x031" gives "Flute 1", never "Flute1"):
+
+        "A.\\x00Person" -> "A. Person"
+        "Song\\x07"     -> "Song"
+
+    Text without a control character comes back exactly as it was, so a
+    name a person typed with two spaces keeps them.
+    """
+    if not CONTROL_CHARACTERS.search(text):
+        return text
+    # split() + join: trims the ends and turns every run of spaces into one.
+    return " ".join(CONTROL_CHARACTERS.sub(" ", text).split())
+
+
+def _clean_text(value: str | list[str] | None) -> str | list[str] | None:
+    """without_control_characters for one text, a list of texts, or None."""
+    if isinstance(value, str):
+        return without_control_characters(value)
+    if isinstance(value, list):
+        return [without_control_characters(text) for text in value]
+    return value  # None stays None
+
+
 def _check_page_number(page: int) -> int:
     """Raise ValueError if `page` is above MAX_PAGE_NUMBER, else return it."""
     if page > MAX_PAGE_NUMBER:
@@ -324,6 +360,14 @@ class Part(BaseModel):
     def _normalise_pages(cls, value: str | list[int]) -> str:
         return _tidy_pages(value)
 
+    # Every text a person can edit, cleaned of control characters when the
+    # model is made (e.g. when an edits file is loaded): see _clean_text.
+    # mode="after" runs once pydantic has checked the type is right.
+    @field_validator("name", "instrument", "number", "key", "duplicate_of", "notes", mode="after")
+    @classmethod
+    def _remove_control_characters(cls, value: str | list[str] | None) -> str | list[str] | None:
+        return _clean_text(value)
+
     def page_list(self) -> list[int]:
         """
         The pages of this part as a list of ints, e.g. [171, 172, 173, 174].
@@ -391,6 +435,12 @@ class Result(BaseModel):
                 f"version {SCHEMA_VERSION}): run 'scoresplit inspect' again"
             )
         return value
+
+    # See Part._remove_control_characters.
+    @field_validator("source", "title", "composer", "arranger", "warnings", mode="after")
+    @classmethod
+    def _remove_control_characters(cls, value: str | list[str] | None) -> str | list[str] | None:
+        return _clean_text(value)
 
     # mode="after" runs once the whole model is built: the moment to bring
     # the worked-out extra pages up to date with the (maybe edited) parts.

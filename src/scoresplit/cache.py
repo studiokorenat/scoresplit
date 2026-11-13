@@ -45,7 +45,10 @@ from .models import PageFacts, TextSpan
 #     own (round 9.12).
 # 19: a credit label must be written like one ("arr", "Arr", "ARR", not
 #     "aRR"): has_credits decides which text pages get their header OCR'd.
-ANALYSIS_VERSION = 19
+# 20: control characters in read text become a space (tidy_text), so a
+#     name never holds a "\x03" (review step 3).
+# 21: the C1 control characters (\x80-\x9f) too.
+ANALYSIS_VERSION = 21
 
 
 def file_sha256(path: Path) -> str:

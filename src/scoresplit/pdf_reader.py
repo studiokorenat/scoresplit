@@ -33,7 +33,7 @@ import numpy as np
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c  # the low-level C functions of PDFium
 
-from .models import TextSpan
+from .models import CONTROL_CHARACTERS, TextSpan
 
 # ---------------------------------------------------------------------------
 # Tuning constants
@@ -104,7 +104,13 @@ def tidy_text(text: str) -> str:
     Examples:
         "  Flute   1 "                  -> "Flute 1"
         "DEEP PURPLE MEDLEYarr. Sahashi" -> "DEEP PURPLE MEDLEY arr. Sahashi"
+        "Flute\x031"                     -> "Flute 1"
     """
+    # Control characters (see models.CONTROL_CHARACTERS) are never wanted in one line
+    # of text. A text layer without a proper font map gives "\x03"-like
+    # letters, and XML can't hold most of them. They become a space (not
+    # nothing), so two words they stood between don't stick together.
+    text = CONTROL_CHARACTERS.sub(" ", text)
     text = GLUED_CREDIT_PATTERN.sub(" ", text)
     return " ".join(text.split())  # trims + collapses spaces
 
