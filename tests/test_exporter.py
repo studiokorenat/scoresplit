@@ -321,6 +321,35 @@ def test_the_csv_export_has_one_row_per_part_and_extra_group(tmp_path: Path) -> 
     assert all((target / row["file"]).is_file() for row in rows if row["file"])
 
 
+def test_the_csv_export_never_starts_a_cell_with_a_formula(tmp_path: Path) -> None:
+    # A spreadsheet runs a cell starting with "=", "+", "-", "@" (or a tab,
+    # or a carriage return) as a formula. Titles and part names come from an
+    # uploaded PDF, so a crafted PDF could run one in the reader's Excel.
+    # The CSV puts a "'" in front; the JSON and XML keep the text as it is.
+    pdf, result = _example(tmp_path)
+    result.title = "=1+1"
+    result.parts[1].name = "@SUM(A1)"
+    result.parts[2].notes = ["-2+3"]
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    export = target / "export"
+
+    with (export / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert {row["title"] for row in rows} == {"'=1+1"}
+    assert rows[1]["name"] == "'@SUM(A1)"
+    assert rows[2]["notes"] == "'-2+3"
+    # No cell anywhere starts with a formula character.
+    formula_starts = ("=", "+", "-", "@", "\t", "\r")
+    assert not [cell for row in rows for cell in row.values() if cell.startswith(formula_starts)]
+
+    data = json.loads((export / f"{target.name}.json").read_text(encoding="utf-8"))
+    assert data["title"] == "=1+1"
+    assert data["parts"][1]["name"] == "@SUM(A1)"
+    root = ET.parse(export / f"{target.name}.xml").getroot()
+    assert root.findtext("title") == "=1+1"
+    assert root.findall("parts/part")[1].findtext("name") == "@SUM(A1)"
+
+
 def test_the_xml_export_holds_the_credits_parts_and_extra_pages(tmp_path: Path) -> None:
     pdf, result = _example(tmp_path)
     target, _ = export_parts(result, pdf, tmp_path / "out")

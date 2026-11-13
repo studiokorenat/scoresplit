@@ -422,12 +422,38 @@ def _write_json(data: dict, path: Path) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+# A spreadsheet (Excel, LibreOffice, Google Sheets) runs a cell that starts
+# with one of these as a formula: "=1+1" shows "2".
+CSV_FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(text: str) -> str:
+    """
+    `text` made safe for a spreadsheet cell: a "'" in front when it starts
+    like a formula, so the spreadsheet shows it as text (without the "'"):
+
+        "=HYPERLINK(...)" -> "'=HYPERLINK(...)"
+        "Flute 1"         -> "Flute 1"
+
+    Titles and part names come from the PDF, so without this a crafted PDF
+    could run a formula on the computer of whoever opens the CSV (known as
+    "CSV injection"). Only the CSV needs it: JSON and XML keep the text.
+    """
+    # str.startswith accepts a tuple: True if it starts with any of them.
+    if text.startswith(CSV_FORMULA_STARTS):
+        return "'" + text
+    return text
+
+
 def _write_csv(data: dict, path: Path) -> None:
     """
     One row per part, then one row per group of extra pages, with the
     columns of CSV_COLUMNS. An extra-pages row has its reason as the kind
     ("cover", "blank", "unassigned"), the label as the name ("Cover") and
     "export" = whether its PDF was written.
+
+    Every cell goes through _csv_safe: a cell that would start like a
+    formula ("=", "+", "-", "@") gets a "'" in front.
     """
     credits = {field: data[field] for field in CREDIT_FIELDS}
     rows = [{**part, **credits} for part in data["parts"]]
@@ -450,7 +476,7 @@ def _write_csv(data: dict, path: Path) -> None:
         writer.writeheader()
         for row in rows:
             # .get(column) = None (-> "") for a column the row doesn't have.
-            writer.writerow({column: _cell(row.get(column)) for column in CSV_COLUMNS})
+            writer.writerow({column: _csv_safe(_cell(row.get(column))) for column in CSV_COLUMNS})
 
 
 # The characters XML 1.0 doesn't allow anywhere, not even escaped: the

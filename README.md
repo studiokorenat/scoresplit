@@ -215,7 +215,10 @@ named `<Title> - <Arranger>` (the composer when there is no arranger):
   and **XML**, and a copy of the original PDF. All three hold the same
   data: the credits, every part (name, instrument, key, clef, pages,
   confidence, notes, ...) with its PDF file name, the extra pages and the
-  warnings. Delete what you don't need.
+  warnings. Delete what you don't need. In the CSV, a text that starts
+  with `=`, `+`, `-` or `@` gets a `'` in front (`'=1+1`), so a spreadsheet
+  shows it as text instead of running it as a formula; the JSON and XML
+  keep the text as it is.
 
 The pages are copied as they are, so the quality is the same as the
 original. If the folder already exists and is not empty, scoresplit stops
