@@ -212,13 +212,33 @@ named `<Title> - <Arranger>` (the composer when there is no arranger):
 - **`extra/`**: the pages that are in no part, named by their reason:
   `cover_pages_1-2.pdf`, `blank_pages_237-238.pdf`.
 - **`export/`**: the parts as **JSON**, **CSV** (opens in a spreadsheet)
-  and **XML**, and a copy of the original PDF. All three hold the same
-  data: the credits, every part (name, instrument, key, clef, pages,
-  confidence, notes, ...) with its PDF file name, the extra pages and the
-  warnings. Delete what you don't need. In the CSV, a text that starts
-  with `=`, `+`, `-` or `@` gets a `'` in front (`'=1+1`), so a spreadsheet
-  shows it as text instead of running it as a formula; the JSON and XML
-  keep the text as it is.
+  and **XML**, and a copy of the original PDF. The JSON and XML hold
+  everything: the credits, every part (name, instrument, key, clef, pages,
+  confidence, notes, ...) with its PDF file name, the extra pages, the
+  warnings and the PDF's fingerprint. The CSV is the readable table (see
+  below). Delete what you don't need. The export always describes the PDF
+  that was really split: its `page_count` and extra pages come from that
+  PDF, even when the edits were made for another one (`--force`).
+
+The CSV has one row per part, then one row per group of extra pages, with
+these columns (find a column by its **name** in the header row, not by its
+position):
+
+| Column | What it holds |
+| --- | --- |
+| `row_type` | `part`, or `extra` for a group of extra pages |
+| `name` … `notes` | the part's fields, as in [the result](#the-result): `name`, `instrument`, `number`, `key`, `key_assumed`, `clef`, `clef_assumed`, `kind`, `pages`, `export`, `duplicate_of`, `confidence`, `notes`. On an `extra` row only `name` (a label: `Cover`), `pages` and `export` are filled in |
+| `reason` | on an `extra` row: `cover`, `blank` or `unassigned`; empty on a part row |
+| `file` | where that PDF was written, relative to the main folder (empty when it wasn't written) |
+| `title`, `composer`, `arranger` | the credits, repeated on every row |
+
+The fingerprint, the page counts and the warnings are only in the JSON and
+XML. A text that starts with `=`, `+`, `-` or `@` gets a `'` in front
+(`'=1+1`), so a spreadsheet shows it as text instead of running it as a
+formula. A list (a part's notes) is one cell with the items joined by
+` | `; a `|` inside an item is written as `/` there, so the cell always
+splits back into the same items. The JSON and XML keep the text exactly.
+A change to these columns raises `schema_version`.
 
 The pages are copied as they are, so the quality is the same as the
 original. If the folder already exists and is not empty, scoresplit stops
@@ -379,7 +399,7 @@ editor saves, what `--edits` reads, and the JSON file in `export/`.
 
 ```jsonc
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "source": "paradiso.pdf",
   "sha256": "6087…",          // fingerprint: edits only apply to the same PDF
   "page_count": 238,
@@ -412,7 +432,8 @@ editor saves, what `--edits` reads, and the JSON file in `export/`.
 To change a part, change its fields. The extra pages are worked out again
 every time a result is loaded: every page that is in no part is an extra
 page, so deleting a part moves its pages to `extra/` by itself. Results from
-older versions (`schema_version` 1 or 2) are refused.
+older versions (`schema_version` 1 to 3) are refused: detect the parts
+again. (Version 3 had the same JSON; version 4 changed the CSV columns.)
 
 ---
 

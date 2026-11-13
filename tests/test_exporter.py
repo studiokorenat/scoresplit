@@ -16,6 +16,7 @@ import pytest
 from scoresplit.exporter import (
     CREDIT_FIELDS,
     CSV_COLUMNS,
+    CSV_CREDIT_FIELDS,
     MAX_FILENAME_BYTES,
     MAX_NAME_BYTES,
     PART_FIELDS,
@@ -299,30 +300,70 @@ def test_the_csv_export_has_one_row_per_part_and_extra_group(tmp_path: Path) -> 
     with (target / "export" / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
 
-    assert list(rows[0]) == [
-        "name", "instrument", "number", "key", "key_assumed", "clef", "clef_assumed",
-        "kind", "pages", "export", "duplicate_of", "confidence", "notes", "file",
-        "schema_version", "source", "sha256", "page_count", "ocr_pages",
-        "title", "composer", "arranger", "warnings",
-    ]
+    assert rows[0]["row_type"] == "part"
     assert rows[0]["name"] == "Conductor Score"
     assert rows[0]["file"] == "01_Song_&_Dance_A_Person_Conductor_Score_pages_2-3.pdf"
     assert rows[0]["confidence"] == "1.0"
+    assert rows[0]["reason"] == ""  # only extra rows have a reason
     # The credits are on every row.
     assert {row["title"] for row in rows} == {"Song & Dance"}
+    assert {row["arranger"] for row in rows} == {"A. Person"}
     assert rows[1]["key"] == "C" and rows[1]["key_assumed"] == "true"
     # The duplicate is listed, with its note, but wasn't written: no file.
     assert (rows[3]["export"], rows[3]["file"]) == ("false", "")
     assert rows[3]["duplicate_of"] == "2. klarinet in Es"
     assert rows[3]["notes"] == "duplicate of '2. klarinet in Es' (pages 6-7)"
-    # After the parts, one row per group of extra pages.
-    assert [(row["kind"], row["name"], row["pages"], row["file"]) for row in rows[4:]] == [
-        ("cover", "Cover", "1", "extra/cover_pages_1.pdf"),
-        ("unassigned", "Unassigned", "9", "extra/unassigned_pages_9.pdf"),
-        ("blank", "Blank", "10", "extra/blank_pages_10.pdf"),
+    # After the parts, one row per group of extra pages: row_type "extra",
+    # the reason in "reason" and NOT in "kind" (a part's kind is score/part),
+    # so a reader that builds parts from the "part" rows gets no fake parts.
+    assert [
+        (row["row_type"], row["reason"], row["kind"], row["name"], row["pages"], row["file"])
+        for row in rows[4:]
+    ] == [
+        ("extra", "cover", "", "Cover", "1", "extra/cover_pages_1.pdf"),
+        ("extra", "unassigned", "", "Unassigned", "9", "extra/unassigned_pages_9.pdf"),
+        ("extra", "blank", "", "Blank", "10", "extra/blank_pages_10.pdf"),
     ]
     # Every listed file exists, relative to the main folder.
     assert all((target / row["file"]).is_file() for row in rows if row["file"])
+
+
+# The CSV columns, written out by hand. This is the layout documented in the
+# README; readers (a spreadsheet, the web tool) may rely on it. If this test
+# fails, the layout changed: if that is on purpose, bump SCHEMA_VERSION
+# (models.py), update the README's list, then this list.
+DOCUMENTED_CSV_COLUMNS = [
+    "row_type",
+    "name", "instrument", "number", "key", "key_assumed", "clef", "clef_assumed",
+    "kind", "pages", "export", "duplicate_of", "confidence", "notes",
+    "reason", "file",
+    "title", "composer", "arranger",
+]
+
+
+def test_the_csv_header_is_the_documented_column_list(tmp_path: Path) -> None:
+    pdf, result = _example(tmp_path)
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    with (target / "export" / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
+        header = next(csv.reader(handle))  # the first line, as a list
+    assert header == DOCUMENTED_CSV_COLUMNS
+    assert CSV_COLUMNS == DOCUMENTED_CSV_COLUMNS
+
+
+def test_the_csv_leaves_the_long_whole_pdf_fields_to_json_and_xml(tmp_path: Path) -> None:
+    # sha256, source, page_count, the warnings ... are not repeated on every
+    # CSV row (they made it very wide); the JSON and XML still hold them.
+    pdf, result = _example(tmp_path)
+    result.warnings = ["a long warning about the whole PDF"]
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    export = target / "export"
+    with (export / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
+        text = handle.read()
+    assert "a long warning" not in text
+    assert "0" * 64 not in text  # the sha256 of make_map
+    data = json.loads((export / f"{target.name}.json").read_text(encoding="utf-8"))
+    assert data["warnings"] == ["a long warning about the whole PDF"]
+    assert data["sha256"] == "0" * 64
 
 
 def test_the_csv_export_never_starts_a_cell_with_a_formula(tmp_path: Path) -> None:
@@ -354,13 +395,34 @@ def test_the_csv_export_never_starts_a_cell_with_a_formula(tmp_path: Path) -> No
     assert root.findall("parts/part")[1].findtext("name") == "@SUM(A1)"
 
 
+def test_a_pipe_inside_a_list_item_does_not_split_the_csv_cell(tmp_path: Path) -> None:
+    # A list is ONE CSV cell, its items joined with " | ". A note that itself
+    # holds " | " (quoting an OCR'd name) would split into too many items when
+    # read back, so the CSV writes its "|" as "/". JSON and XML keep it exact.
+    pdf, result = _example(tmp_path)
+    result.parts[2].notes = ["read as 'Fl | Picc'", "second note"]
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    export = target / "export"
+
+    with (export / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    # Split back at " | ": the same two items, the inner "|" now "/".
+    assert rows[2]["notes"].split(" | ") == ["read as 'Fl / Picc'", "second note"]
+
+    data = json.loads((export / f"{target.name}.json").read_text(encoding="utf-8"))
+    assert data["parts"][2]["notes"] == ["read as 'Fl | Picc'", "second note"]
+    root = ET.parse(export / f"{target.name}.xml").getroot()
+    notes = root.findall("parts/part")[2].findall("notes/note")
+    assert [note.text for note in notes] == ["read as 'Fl | Picc'", "second note"]
+
+
 def test_the_xml_export_holds_the_credits_parts_and_extra_pages(tmp_path: Path) -> None:
     pdf, result = _example(tmp_path)
     target, _ = export_parts(result, pdf, tmp_path / "out")
     root = ET.parse(target / "export" / f"{target.name}.xml").getroot()
 
     assert root.tag == "scoresplit"
-    assert root.get("schema_version") == "3"
+    assert root.get("schema_version") == "4"
     # findtext gives the text of the first matching element.
     assert root.findtext("title") == "Song & Dance"  # "&" written as "&amp;" and read back
     assert root.findtext("arranger") == "A. Person"
@@ -430,22 +492,63 @@ def test_extra_pages_not_written_are_still_listed_without_a_file(tmp_path: Path)
     ]
 
 
-# Each CSV row is {**part, **credits}: a part's fields merged with the
-# fields of the whole result. If Part and Result ever got a field with the
-# same name, the result's value would silently replace the part's on every
-# row, and the header would have that column twice. These two tests make
-# such a clash fail here instead of quietly corrupting the CSV.
+def test_every_file_the_json_lists_was_written(tmp_path: Path) -> None:
+    # The extra pages' paths are built in ONE place and used both to write
+    # the files and to list them, so the two can't point at different files.
+    pdf, result = _example(tmp_path)
+    target, written = export_parts(result, pdf, tmp_path / "out")
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+
+    listed = [part["file"] for part in data["parts"]] + [extra["file"] for extra in data["extra"]]
+    listed = [file for file in listed if file]  # "" = not written
+    assert listed  # the example does write parts and extra pages
+    assert all((target / file).is_file() for file in listed)
+    # ...and every part or extra PDF written is listed.
+    pdfs_written = {path.relative_to(target).as_posix() for path in (w.path for w in written)}
+    assert set(listed) == {file for file in pdfs_written if not file.startswith("export/")}
+
+
+def test_the_export_describes_the_pdf_really_split(tmp_path: Path) -> None:
+    # An edits file loaded with --force can come from another PDF: here the
+    # result says 10 pages, but the PDF split has 12. The JSON must say 12,
+    # list pages 11-12 as extra, and give the same extras when loaded back.
+    pdf, result = _example(tmp_path)
+    pdf = make_pdf(tmp_path / "longer.pdf", 12)
+    assert result.page_count == 10
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+
+    assert data["page_count"] == 12
+    # Page 9 was already in no part; 11 and 12 join it.
+    groups = [(extra["reason"], extra["pages"]) for extra in data["extra"]]
+    assert ("unassigned", "9,11-12") in groups
+    # Loaded back (as --edits would), the extras are worked out the same.
+    reloaded = Result.model_validate(data)
+    assert [extra.model_dump() for extra in reloaded.extra_groups()] == [
+        {"reason": extra["reason"], "pages": extra["pages"]} for extra in data["extra"]
+    ]
+    # The caller's result itself is not changed.
+    assert result.page_count == 10
+
+
+# Each CSV row is {"row_type": ..., **part, **credits}: a part's fields
+# merged with some fields of the whole result. If Part and Result ever got
+# a field with the same name, the result's value would silently replace the
+# part's on every row, and the header would have that column twice. These
+# tests make such a clash fail here instead of quietly corrupting the CSV.
 # (A test, not an assert in exporter.py: "python -O" turns asserts off.)
 
 
 def test_part_fields_and_credit_fields_share_no_name() -> None:
     # isdisjoint = "the two have no name in common".
     assert set(PART_FIELDS).isdisjoint(CREDIT_FIELDS)
+    # The CSV's few credits are real fields of the result.
+    assert set(CSV_CREDIT_FIELDS) <= set(CREDIT_FIELDS)
 
 
 def test_the_csv_columns_have_no_duplicates() -> None:
     # A set drops duplicates, so the lengths differ when a name is there
-    # twice (this also covers the extra "file" column between the two lists).
+    # twice (this also covers row_type, reason and file between the lists).
     assert len(set(CSV_COLUMNS)) == len(CSV_COLUMNS)
 
 

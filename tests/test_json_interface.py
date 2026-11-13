@@ -220,7 +220,7 @@ def test_edits_file_with_a_huge_page_count_is_bad_input_not_a_hang(tmp_path: Pat
     [
         ("{not json", "cannot read edits file edits.json"),
         ("[1, 2]", "is not a scoresplit result (not a JSON object)"),
-        ('{"schema_version": 2}', "has schema_version 2, but this scoresplit reads only version 3"),
+        ('{"schema_version": 2}', "has schema_version 2, but this scoresplit reads only version 4"),
     ],
 )
 def test_unreadable_edits_file_is_bad_input(tmp_path: Path, content: str, message: str) -> None:

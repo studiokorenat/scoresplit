@@ -26,15 +26,18 @@ part_filename() gives: the name as printed, the key, the clef ("tc" /
 Pages are copied with PDFium's import_pages(): the page content is copied
 as-is (no re-rendering), so the quality is identical to the original.
 
-The three export files hold the SAME data in three formats (the credits,
-every field of every part with its PDF file name, the extra pages with
-their file names, the warnings), written with Python's own json, csv and
-xml modules (no extra libraries). A person deletes what they don't need:
+The JSON and XML hold the same data (the credits, every field of every
+part with its PDF file name, the extra pages with their file names, the
+warnings); the CSV is the readable table of it. All three are written with
+Python's own json, csv and xml modules (no extra libraries). A person
+deletes what they don't need:
 
     .json  the whole result (models.Result) plus the file names: it can be
            edited and given back to `scoresplit split --edits`.
-    .csv   one row per part and per group of extra pages, for a spreadsheet.
-    .xml   the same, for programs that prefer XML.
+    .csv   one row per part and per group of extra pages, for a spreadsheet,
+           with only title, composer and arranger of the credits (see
+           CSV_COLUMNS).
+    .xml   the same as the JSON, for programs that prefer XML.
 """
 
 from __future__ import annotations
@@ -72,10 +75,11 @@ EXTRA_LABELS = {
     "unassigned": "Unassigned",
 }
 
-# The three export files (JSON, CSV, XML) hold the SAME data; a person can
-# delete what they don't need afterwards. The field lists are read from the
-# models themselves, so a field added to Part or Result later shows up in
-# all three files by itself.
+# The JSON and XML hold the SAME data, the CSV every part field and a few
+# credits; a person can delete what they don't need afterwards. The field
+# lists are read from the models themselves, so a field added to Part shows
+# up in all three files by itself (a field added to Result: in the JSON and
+# XML).
 #
 # Every field of a part: name, instrument, ..., confidence, notes.
 # (Part.model_fields is pydantic's dict of the fields, in the class order.)
@@ -84,16 +88,37 @@ PART_FIELDS = list(Part.model_fields)
 # "parts" and "extra" are left out: they are lists of their own.
 CREDIT_FIELDS = [name for name in Result.model_fields if name not in ("parts", "extra")]
 
-# The columns of the CSV export, in this order: one row per part (and one
-# per group of extra pages), then "file" = where that PDF was written,
-# relative to the main folder ("" when it wasn't written), then the
-# credits, repeated on every row so each row stands on its own.
-# The names must all differ (a part field named like a credit would be
-# overwritten on every row); tests/test_exporter.py checks this.
-CSV_COLUMNS = [*PART_FIELDS, "file", *CREDIT_FIELDS]
+# The credits the CSV repeats on every row, so a row read alone still says
+# which piece it belongs to. The rest of the whole-PDF fields (sha256,
+# source, page_count, the warnings, ...) are left to the JSON and XML: on
+# 60 rows they made the table very wide and hard to read.
+CSV_CREDIT_FIELDS = ["title", "composer", "arranger"]
+
+# The columns of the CSV export, in this order:
+#   row_type  "part" for a part, "extra" for a group of extra pages, so a
+#             reader never takes a cover page for a part;
+#   the part fields (name, instrument, ..., notes); empty on an extra row,
+#             except name (its label, "Cover"), pages and export;
+#   reason    why the pages are extra ("cover", "blank", "unassigned");
+#             empty on a part row;
+#   file      where that PDF was written, relative to the main folder
+#             ("" when it wasn't written);
+#   the credits of CSV_CREDIT_FIELDS.
+# Readers should find a column by its NAME (the header row), not by its
+# position. Any change here changes the CSV layout: bump SCHEMA_VERSION
+# (models.py) and update the column list in the README. A test in
+# tests/test_exporter.py compares the header with a fixed list, so the
+# change can't happen by accident. The names must all differ (a part
+# field named like a credit would be overwritten on every row); a test
+# checks that too.
+CSV_COLUMNS = ["row_type", *PART_FIELDS, "reason", "file", *CSV_CREDIT_FIELDS]
 
 # How a list (a part's notes, the warnings) is written in ONE CSV cell.
 CSV_LIST_SEPARATOR = " | "
+# A "|" INSIDE one item becomes this, so splitting the cell at " | " gives
+# back exactly the items written ("Fl | Picc" would otherwise become two).
+# Only the CSV changes the text; the JSON and XML keep it as it is.
+CSV_PIPE_REPLACEMENT = "/"
 
 
 @dataclass(frozen=True)
@@ -383,7 +408,7 @@ def _export_data(result: Result, files: dict[int, str], extras: list[tuple[Extra
     shape). The CSV and the XML are written from this same dict, so the
     three files can't drift apart:
 
-        {"schema_version": 3, "source": "paradiso.pdf", ..., "warnings": [...],
+        {"schema_version": 4, "source": "paradiso.pdf", ..., "warnings": [...],
          "parts": [{"name": "Flute 1", ..., "notes": [...], "file": "02_...pdf"}],
          "extra": [{"reason": "cover", "pages": "1", "file": "extra/cover_pages_1.pdf"}]}
 
@@ -407,14 +432,21 @@ def _cell(value: object) -> str:
     """
     One value as text, for a CSV cell or an XML element. None becomes "",
     True/False "true"/"false" (as in JSON) and a list one text joined with
-    " | ", so the CSV and the XML read the same way.
+    " | " (only the CSV has lists here; the XML gives each item its own
+    element, see _add_xml_field):
+
+        ["read on page 2", "Fl | Picc"] -> "read on page 2 | Fl / Picc"
+
+    A "|" inside an item becomes "/", so the cell always splits back at
+    " | " into the same number of items.
     """
     if value is None:
         return ""
     if isinstance(value, bool):  # isinstance = PHP's instanceof / is_bool
         return "true" if value else "false"
     if isinstance(value, list):
-        return CSV_LIST_SEPARATOR.join(str(item) for item in value)
+        items = (str(item).replace("|", CSV_PIPE_REPLACEMENT) for item in value)
+        return CSV_LIST_SEPARATOR.join(items)
     return str(value)
 
 
@@ -449,21 +481,23 @@ def _csv_safe(text: str) -> str:
 
 def _write_csv(data: dict, path: Path) -> None:
     """
-    One row per part, then one row per group of extra pages, with the
-    columns of CSV_COLUMNS. An extra-pages row has its reason as the kind
-    ("cover", "blank", "unassigned"), the label as the name ("Cover") and
-    "export" = whether its PDF was written.
+    One row per part (row_type "part"), then one row per group of extra
+    pages (row_type "extra"), with the columns of CSV_COLUMNS. An extra row
+    has its reason in "reason" ("cover", "blank", "unassigned"), its label
+    as the name ("Cover"), "export" = whether its PDF was written, and an
+    empty "kind" (a part's kind is only "score" or "part").
 
     Every cell goes through _csv_safe: a cell that would start like a
     formula ("=", "+", "-", "@") gets a "'" in front.
     """
-    credits = {field: data[field] for field in CREDIT_FIELDS}
-    rows = [{**part, **credits} for part in data["parts"]]
+    credits = {field: data[field] for field in CSV_CREDIT_FIELDS}
+    rows = [{"row_type": "part", **part, **credits} for part in data["parts"]]
     for extra in data["extra"]:
         rows.append(
             {
+                "row_type": "extra",
                 "name": EXTRA_LABELS.get(extra["reason"], extra["reason"]),
-                "kind": extra["reason"],
+                "reason": extra["reason"],
                 "pages": extra["pages"],
                 "export": bool(extra["file"]),
                 "file": extra["file"],
@@ -539,7 +573,7 @@ def _write_xml(data: dict, path: Path) -> None:
     """
     The export data as XML:
 
-        <scoresplit schema_version="3">
+        <scoresplit schema_version="4">
           <source>paradiso.pdf</source> ... <title>, <composer>, <arranger>
           <warnings><warning>...</warning></warnings>
           <parts>
@@ -650,20 +684,36 @@ def export_parts(
         if folder_in_use(target) and not force:
             raise OutputExistsError(str(target))
 
+        # The export files describe the PDF really split. An edits file
+        # loaded with force=True may come from another PDF with a different
+        # page count; without this the JSON would list the extra pages of
+        # THIS PDF but the page_count of the other one, and loading it back
+        # with --edits would quietly work out other extra pages.
+        # model_copy(update=...) = a copy with that field changed; the
+        # caller's result stays as it was.
+        if result.page_count != len(source):
+            result = result.model_copy(update={"page_count": len(source)})
+
         # Decide every file first, so the total is known before writing:
         # a progress bar needs "of how many" from the start.
-        # files = duplicates and parts the user switched off are skipped;
-        # extras = every page in no part, worked out afresh from the parts
-        # (see Result.extra_groups), for the pages this PDF really has.
+        # files = duplicates and parts the user switched off are skipped.
         files = part_filenames(result)  # {position: file name}
-        # all_extras is listed in the export files even when the extra pages
-        # aren't written (include_extra off); then their "file" is "".
-        all_extras = result.extra_groups(len(source))
-        extras = all_extras if include_extra else []
+        # extra_files = every group of pages in no part, worked out afresh
+        # from the parts (see Result.extra_groups), each with its file path
+        # relative to the main folder. The path is built HERE only: the
+        # write loop and the export files both use it, so they can't
+        # disagree. With include_extra off the groups are still listed in
+        # the export files, with "" as their file, and nothing is written.
+        extra_files = [
+            (extra, f"{EXTRA_FOLDER}/{extra_filename(extra)}" if include_extra else "")
+            for extra in result.extra_groups()
+        ]
+        # Only the groups that have a file get written.
+        extras_to_write = [(extra, file) for extra, file in extra_files if file]
         exports = export_files(target)
         # The original PDF, the whole score, is copied as it is into export/.
         original_copy = target / EXPORT_FOLDER / pdf_path.name
-        total = len(files) + len(extras) + len(exports) + 1  # + 1 = the copy
+        total = len(files) + len(extras_to_write) + len(exports) + 1  # + 1 = the copy
         if progress:
             progress(0, total)
 
@@ -679,16 +729,14 @@ def export_parts(
             _write_pages(source, result.parts[index].page_list(), file_path)
             done(ExportedFile(path=file_path, part=index))
 
-        for extra in extras:
-            file_path = target / EXTRA_FOLDER / extra_filename(extra)
+        for extra, file in extras_to_write:
+            # pathlib reads the "/" in "extra/cover_pages_1.pdf" as a folder
+            # separator on every system, Windows included.
+            file_path = target / file
             _write_pages(source, extra.page_list(), file_path)
             done(ExportedFile(path=file_path))
 
         # One set of data for all three export files (see _export_data).
-        extra_files = [
-            (extra, f"{EXTRA_FOLDER}/{extra_filename(extra)}" if include_extra else "")
-            for extra in all_extras
-        ]
         data = _export_data(result, files, extra_files)
         json_path, csv_path, xml_path = exports
         json_path.parent.mkdir(parents=True, exist_ok=True)

@@ -189,10 +189,13 @@ class PageInfo:
 # External contract (pydantic): the result
 # ---------------------------------------------------------------------------
 
-# The version of the result's JSON shape. Bump it whenever the shape changes
-# in a way older readers can't handle. Version 3 is the simple result below;
-# versions 1 and 2 (the old "page map") can't be read any more.
-SCHEMA_VERSION = 3
+# The version of the export's shape: the result's JSON and the CSV/XML
+# written from it. Bump it whenever the shape changes in a way older readers
+# can't handle. Version 3 was the first simple result below; version 4 is
+# the same JSON with a new CSV layout (row_type and reason columns, only
+# title/composer/arranger as credits). Versions 1 and 2 (the old "page
+# map") can't be read any more.
+SCHEMA_VERSION = 4
 
 # The highest page number a result may mention. No real score has this many
 # pages; the limit stops an edited file like "1-999999999999" from creating a

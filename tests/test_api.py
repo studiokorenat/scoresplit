@@ -131,7 +131,7 @@ def test_load_edits_for_another_pdf_is_bad_input(tmp_path: Path) -> None:
 def test_load_edits_with_broken_json_is_bad_input(tmp_path: Path) -> None:
     pdf = make_pdf(tmp_path / "score.pdf", 2)
     map_file = tmp_path / "map.json"
-    map_file.write_text(json.dumps({"schema_version": 3, "parts": "not a list"}), encoding="utf-8")
+    map_file.write_text(json.dumps({"schema_version": 4, "parts": "not a list"}), encoding="utf-8")
     with pytest.raises(api.BadInputError, match="is not a valid scoresplit result") as caught:
         api.load_edits(map_file, pdf)
     # Every mistake at once, each saying where it is: "parts" has the wrong
@@ -144,9 +144,10 @@ def test_load_edits_with_broken_json_is_bad_input(tmp_path: Path) -> None:
         api.load_edits(tmp_path / "nope.json", pdf)
 
 
-@pytest.mark.parametrize("version", [None, 1, 2])
+@pytest.mark.parametrize("version", [None, 1, 2, 3])
 def test_load_edits_refuses_a_file_of_an_older_scoresplit(tmp_path: Path, version: int | None) -> None:
     # Versions 1 and 2 were the old "page map"; version 1 had no schema_version.
+    # Version 3 had the same JSON as 4, but the CSV layout before row_type.
     pdf = make_pdf(tmp_path / "score.pdf", 2)
     old = make_map([Part(name="Flute", pages="1")]).model_dump()
     if version is None:
@@ -155,7 +156,7 @@ def test_load_edits_refuses_a_file_of_an_older_scoresplit(tmp_path: Path, versio
         old["schema_version"] = version
     map_file = tmp_path / "map.json"
     map_file.write_text(json.dumps(old), encoding="utf-8")
-    with pytest.raises(api.BadInputError, match=f"has schema_version {version or 1}, but this scoresplit reads only version 3"):
+    with pytest.raises(api.BadInputError, match=f"has schema_version {version or 1}, but this scoresplit reads only version 4"):
         api.load_edits(map_file, pdf)
 
 
