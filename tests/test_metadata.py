@@ -96,7 +96,7 @@ def test_a_credit_must_be_read_on_enough_pages_when_asked() -> None:
     facts = [march_card(1, "Piccolo", "CD Cassette"), march_card(2, "Flute", "CD Cassette")]
     infos = [classify_page(page) for page in facts]
     assert extract_metadata(facts, infos)["composer"] == "Cd Cassette"
-    assert extract_metadata(facts, infos, min_votes=3)["composer"] is None
+    assert extract_metadata(facts, infos, min_pages=3)["composer"] is None
 
 
 def test_a_credit_label_must_be_written_like_one() -> None:
@@ -148,3 +148,43 @@ def test_a_credit_read_on_one_page_gives_way_to_one_read_on_many() -> None:
     # The first vote alone takes the noise: it is the only name it sees.
     assert extract_metadata(facts, infos)["composer"] == "Urti Prn S"
     assert read_credits(facts, infos)["composer"] == "Jacob de Haan"
+
+
+# --- Review step 6: "read on at least N pages" counts pages, not weight -------
+
+
+def credits_page(number: int, composer: str, source: str = "ocr") -> PageFacts:
+    """Helper: a first page with a title and a "Composer:" label."""
+    return PageFacts(
+        page_number=number,
+        source=source,
+        staff_count=9,
+        header=[
+            TextSpan("Cornfield Rock", x0=0.30, y0=0.02, x1=0.70, y1=0.06, size=24),
+            TextSpan(f"Composer: {composer}", x0=0.65, y0=0.07, x1=0.95, y1=0.09, size=10),
+        ],
+    )
+
+
+def test_one_text_page_is_not_three_pages() -> None:
+    # A text page weighs TEXT_VOTE_WEIGHT (3) in the vote, but it is still
+    # only ONE page: one noisy line must not pass "read on 3 pages".
+    facts = [credits_page(1, "Noise Name", source="text")]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["composer"] == "Noise Name"
+    assert extract_metadata(facts, infos, min_pages=3)["composer"] is None
+
+
+def test_a_name_read_on_three_ocr_pages_counts() -> None:
+    facts = [credits_page(number, "Jacob de Haan") for number in (1, 2, 3)]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos, min_pages=3)["composer"] == "Jacob de Haan"
+
+
+def test_the_heavier_name_wins_when_both_have_enough_pages() -> None:
+    from scoresplit.metadata import _vote
+
+    # Both names on 2 pages; the text pages weigh more.
+    votes = [("Ocr Name", 1), ("Ocr Name", 1), ("Text Name", 3), ("Text Name", 3)]
+    assert _vote(votes, min_pages=2) == "Text Name"
+    assert _vote(votes, min_pages=3) is None

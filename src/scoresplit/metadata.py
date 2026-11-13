@@ -246,21 +246,28 @@ def _title_candidate(spans: list[TextSpan]) -> str | None:
     return max(candidates, key=lambda candidate: candidate[1])[0]
 
 
-def _vote(votes: list[tuple[str, int]], min_weight: int = 1) -> str | None:
+def _vote(votes: list[tuple[str, int]], min_pages: int = 1) -> str | None:
     """
-    The value with the most votes. Each vote is (value, weight). Values are
-    compared loosely (case and punctuation ignored), and the winner is
-    returned in its most-voted original spelling. A winner with less than
-    `min_weight` votes in total doesn't count (None).
+    The value with the most votes. Each vote is (value, weight) and comes
+    from one page (a page adds at most one vote to each list, see
+    _read_title_page). Values are compared loosely (case and punctuation
+    ignored), and the winner is returned in its most-voted original spelling.
+
+    The WEIGHT picks the winner (embedded text is more reliable than OCR),
+    but the winner must have been read on at least `min_pages` PAGES to
+    count (else None). One text page weighs TEXT_VOTE_WEIGHT, but it is
+    still only one page: one noisy line must not count as "read on 3 pages".
     """
     if not votes:
         return None
 
-    totals: Counter = Counter()
+    totals: Counter = Counter()  # loose value -> total weight
+    pages: Counter = Counter()  # loose value -> number of votes (= pages)
     for value, weight in votes:
         totals[_loose(value)] += weight
-    winner_key, winner_weight = totals.most_common(1)[0]
-    if winner_weight < min_weight:
+        pages[_loose(value)] += 1
+    winner_key = totals.most_common(1)[0][0]
+    if pages[winner_key] < min_pages:
         return None
 
     spellings: Counter = Counter()
@@ -360,13 +367,13 @@ def _read_title_page(page_facts: PageFacts, info: PageInfo, votes: _Votes) -> No
 
 
 def extract_metadata(
-    facts: list[PageFacts], infos: list[PageInfo], min_votes: int = 1
+    facts: list[PageFacts], infos: list[PageInfo], min_pages: int = 1
 ) -> dict[str, str | None]:
     """
     Return {"title": ..., "composer": ..., "arranger": ...} (values may be None).
 
-    `min_votes`: a composer or arranger must be read with at least this much
-    vote weight (about: on this many pages) to count.
+    `min_pages`: a composer or arranger must be read on at least this many
+    pages to count (pages, not vote weight: see _vote).
 
     `facts` and `infos` are the per-page lists, in the same page order.
     """
@@ -395,8 +402,8 @@ def extract_metadata(
     unlabelled = list(votes.right_names)
     if sum(weight for _, weight in votes.left_names) >= LEFT_COMPOSER_MIN_VOTES:
         unlabelled += votes.left_names
-    composer = _vote(votes.composers, min_votes) or _vote(unlabelled, min_votes)
-    arranger = _vote(votes.arrangers, min_votes)
+    composer = _vote(votes.composers, min_pages) or _vote(unlabelled, min_pages)
+    arranger = _vote(votes.arrangers, min_pages)
     return {
         "title": nice_case(title) if title else None,
         "composer": nice_case(composer) if composer else None,

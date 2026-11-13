@@ -40,8 +40,9 @@ DUPLICATE_MIN_SIMILARITY = 0.8
 DUPLICATE_PAGES_COMPARED = 2
 
 # A composer or arranger filled in from the parts' first pages (see
-# inspect_pdf) must be read on at least this many of them.
-FILL_CREDITS_MIN_VOTES = 3
+# inspect_pdf) must be read on at least this many of them (pages, not vote
+# weight: one text page weighs more in the vote, but is still one page).
+FILL_CREDITS_MIN_PAGES = 3
 
 
 class MusicComparer:
@@ -86,7 +87,7 @@ def read_credits(facts: list[PageFacts], infos: list[PageInfo]) -> dict[str, str
       1. On the pages that look like first pages (credits, a cover).
       2. The title (and the names found) then mark more first pages: those
          whose credits OCR couldn't read. The credits are read again on all
-         of them, and a name read on at least FILL_CREDITS_MIN_VOTES pages
+         of them, and a name read on at least FILL_CREDITS_MIN_PAGES pages
          fills in a composer or arranger that the first vote
          - didn't find (cornfield: only the cover voted, and its "Jacob de
            Haan" sits in the middle, not on the right), or
@@ -100,7 +101,7 @@ def read_credits(facts: list[PageFacts], infos: list[PageInfo]) -> dict[str, str
     meta = extract_metadata(facts, infos)
     # The same first vote, counting only names read on enough pages: a value
     # that is missing there (or different) was read on too few pages.
-    confirmed = extract_metadata(facts, infos, min_votes=FILL_CREDITS_MIN_VOTES)
+    confirmed = extract_metadata(facts, infos, min_pages=FILL_CREDITS_MIN_PAGES)
     # The values the second vote may fill in: empty, or read on too few pages.
     weak = [
         key
@@ -110,7 +111,7 @@ def read_credits(facts: list[PageFacts], infos: list[PageInfo]) -> dict[str, str
 
     mark_title_pages(facts, infos, meta["title"], (meta["composer"], meta["arranger"]))
     if weak:
-        again = extract_metadata(facts, infos, min_votes=FILL_CREDITS_MIN_VOTES)
+        again = extract_metadata(facts, infos, min_pages=FILL_CREDITS_MIN_PAGES)
         for key in weak:
             # "a or b" gives b when a is None: a weak value stays when the
             # second vote found nothing better.
