@@ -51,7 +51,9 @@ from .models import PageFacts, TextSpan
 # 21: the C1 control characters (\x80-\x9f) too.
 # 22: a clef at the very left edge of the page (staff starting in column 0)
 #     is measured, not missed (Buffalo Dances pages 41 and 104).
-ANALYSIS_VERSION = 22
+# 23: pages without staves are also measured turned by 90 degrees
+#     (PageFacts.sideways_staff_count): Tullamore page 100 is printed sideways.
+ANALYSIS_VERSION = 23
 
 
 def file_sha256(path: Path) -> str:

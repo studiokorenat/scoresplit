@@ -188,3 +188,43 @@ def test_the_heavier_name_wins_when_both_have_enough_pages() -> None:
     votes = [("Ocr Name", 1), ("Ocr Name", 1), ("Text Name", 3), ("Text Name", 3)]
     assert _vote(votes, min_pages=2) == "Text Name"
     assert _vote(votes, min_pages=3) is None
+
+
+def _cover(number: int, text: str) -> PageFacts:
+    """Helper: a page without music whose only big text is `text`."""
+    return PageFacts(
+        page_number=number,
+        source="ocr",
+        staff_count=0,
+        ink_ratio=0.05,
+        body=[TextSpan(text, x0=0.2, y0=0.3, x1=0.8, y1=0.36, size=28)],
+    )
+
+
+def _tullamore_part_page(number: int, part: str) -> PageFacts:
+    """Helper: a part's first page with the title on top, no credit label."""
+    return PageFacts(
+        page_number=number,
+        source="ocr",
+        staff_count=12,
+        header=[
+            TextSpan(part, x0=0.05, y0=0.05, x1=0.2, y1=0.06, size=7),
+            TextSpan("LORD TULLAMORE", x0=0.3, y0=0.05, x1=0.65, y1=0.08, size=18),
+            TextSpan("Carl Wittrock", x0=0.75, y0=0.07, x1=0.9, y1=0.08, size=7),
+        ],
+    )
+
+
+def test_title_printed_on_the_music_pages_beats_a_cover_series_label() -> None:
+    # tullamore: the front cover's biggest text is the series "Concert Band",
+    # the title page says "LORD TULLAMORE", the back cover "publications":
+    # one vote each. The part pages print the title on top, so it wins.
+    facts = [
+        _cover(1, "Concert Band"),
+        _cover(2, "LORD TULLAMORE"),
+        _tullamore_part_page(3, "Flute"),
+        _tullamore_part_page(4, "Oboe"),
+        _cover(5, "publications"),
+    ]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["title"] == "Lord Tullamore"

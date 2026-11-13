@@ -907,3 +907,30 @@ def test_a_bare_number_before_percussion_counts_the_players() -> None:
     # in front of another name still numbers the part (Sedona).
     assert find_part_name("2 SLAGWERK").number is None
     assert find_part_name("1 Clarinet in Bb").number == "1"
+
+
+@pytest.mark.parametrize(
+    ("text", "instrument_id", "key"),
+    [
+        # Tullamore p111/113: "E♭ Bass" with the flat read as a dot. "e. bass"
+        # is also a Bass Guitar abbreviation, but a Bass can be in Eb.
+        ("E. Bass", "bass", "Eb"),
+        ("E: Bass", "bass", "Eb"),
+        ("E. Bass 2", "bass", "Eb"),
+        # One word: no room for a flat sign, so the abbreviation stays.
+        ("E.Bass", "bass_guitar", None),
+        # A fully abbreviated name stays what it abbreviates: English horn,
+        # electric guitar (never read as "Eb Horn" / "Eb Guitar").
+        ("E. Hn.", "english_horn", None),
+        ("E.H.", "english_horn", None),
+        ("E. Gtr.", "electric_guitar", None),
+        # "e. horn" is no abbreviation: an Eb horn (Tullamore p95-98).
+        ("E. Horn", "horn", "Eb"),
+    ],
+)
+def test_e_with_a_dot_is_e_flat_only_before_a_full_name(
+    text: str, instrument_id: str, key: str | None
+) -> None:
+    part = find_part_name(text)
+    assert part is not None
+    assert (part.instrument_id, part.key) == (instrument_id, key)

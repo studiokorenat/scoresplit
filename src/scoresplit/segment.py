@@ -134,6 +134,9 @@ class Segment:
     # True when the key in `name` wasn't printed but filled in (from the part
     # before it, or the default key after a misread one). See _part_key.
     key_assumed: bool = False
+    # True = pages printed sideways (PageInfo.sideways): unreadable, so the
+    # part has no name and confidence 0 until a person names it.
+    sideways: bool = False
 
     def page_numbers(self) -> list[int]:
         return [page.page_number for page in self.pages]
@@ -315,6 +318,10 @@ def _starts_new_part(
     """Decide whether part page `info` begins a new segment."""
     if current is None or current.kind != "part":
         return True
+    # A sideways part takes no upright page with a name: that one starts
+    # the next part.
+    if current.sideways:
+        return True
 
     # In both modes: a clef printed in the name that differs from the part so
     # far starts the other clef version ("Euphonium" -> "Euphonium (B.C.)").
@@ -392,6 +399,17 @@ def _cut_into_segments(
             current.pages.append(info)
             if info.part is None:
                 current.inherited.append(info.page_number)
+            seen_music = True
+            continue
+
+        # Music printed sideways: a part of its own (see build_parts), also
+        # in the middle of another part. More sideways pages in a row stay
+        # together.
+        if info.sideways:
+            if current is None or not current.sideways:
+                current = Segment(kind="part", sideways=True)
+                segments.append(current)
+            current.pages.append(info)
             seen_music = True
             continue
 
@@ -997,14 +1015,20 @@ def build_parts(
         else:
             pages = format_page_ranges(segment.page_numbers())
             segment.recognised_name = f"Unknown Part (p{pages})"
-            segment.notes.append("no part name could be read: please rename")
+            if segment.sideways:
+                segment.notes.append(
+                    "page printed sideways (or unreadable): please name it or join it to a part"
+                )
+            else:
+                segment.notes.append("no part name could be read: please rename")
         # Only worth a note when unnamed pages are unusual in this PDF.
         if segment.inherited and names_on_every_page:
             segment.notes.append(
                 f"page(s) {format_page_ranges(segment.inherited)} had no readable "
                 "name and were added to this part"
             )
-        if segment.confidence < LOW_CONFIDENCE:
+        # (A sideways part already says what to do.)
+        if segment.confidence < LOW_CONFIDENCE and not segment.sideways:
             segment.notes.append("low confidence: please check")
 
     _fill_missing_numbers(part_segments)

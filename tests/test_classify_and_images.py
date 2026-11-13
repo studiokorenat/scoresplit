@@ -645,3 +645,58 @@ def test_a_key_on_the_second_line_of_two_names_counts() -> None:
     # the instrument, the key printed below it is the part's key.
     info = classify_page(_header_page(["BARITON", "1e TUBA Bb (BASSE SOLO)"]))
     assert (info.part.instrument_id, info.part.key) == ("baritone", "Bb")
+
+
+def test_a_cue_inside_the_music_does_not_name_a_page() -> None:
+    # tullamore page 92: one-line percussion staves weren't found, so the
+    # header reached down into the music and held the cue "Triangel". The
+    # page has no header of its own: it gets no name and continues the part
+    # before it.
+    page = PageFacts(
+        page_number=92,
+        source="ocr",
+        staff_count=3,
+        ink_ratio=0.08,
+        header=[
+            TextSpan("J", x0=0.2, y0=0.108, x1=0.22, y1=0.12, size=10),
+            TextSpan("Tr iange l", x0=0.62, y0=0.258, x1=0.7, y1=0.27, size=9),
+        ],
+    )
+    info = classify_page(page)
+    assert info.part is None
+
+
+def test_a_name_lower_down_counts_on_a_page_with_credits() -> None:
+    # A first page with a tall title block: the credits say it IS a header.
+    page = PageFacts(
+        page_number=1,
+        source="ocr",
+        staff_count=10,
+        ink_ratio=0.08,
+        header=[
+            TextSpan("Arr. Jan de Vries", x0=0.7, y0=0.12, x1=0.9, y1=0.14, size=9),
+            TextSpan("Flute 1", x0=0.05, y0=0.2, x1=0.15, y1=0.22, size=10),
+        ],
+    )
+    info = classify_page(page)
+    assert info.part is not None and info.part.instrument_id == "flute"
+
+
+def test_music_printed_sideways_is_marked_but_a_back_cover_is_not() -> None:
+    # Tullamore page 100: no staves upright, 10 with the page turned.
+    sideways = classify_page(
+        PageFacts(page_number=100, source="ocr", ink_ratio=0.05, sideways_staff_count=10)
+    )
+    assert (sideways.sideways, sideways.kind) == (True, "unknown")
+    # Page 46, the back cover (logo, address): no staves either way. A dark
+    # cover may show one "staff" turned (Funk Attack page 1): still no music.
+    for turned in (0, 1):
+        cover = classify_page(
+            PageFacts(page_number=46, source="ocr", ink_ratio=0.05, sideways_staff_count=turned)
+        )
+        assert not cover.sideways
+    # Upright staves win: the turned page isn't even measured then.
+    upright = classify_page(
+        PageFacts(page_number=5, source="ocr", ink_ratio=0.05, staff_count=9, sideways_staff_count=4)
+    )
+    assert not upright.sideways

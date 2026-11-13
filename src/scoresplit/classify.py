@@ -91,6 +91,12 @@ CATALOGUE_MIN_LINES = 80
 # OCR'd names are a bit less trustworthy than embedded text.
 OCR_CONFIDENCE_FACTOR = 0.9
 
+# A page printed sideways has music on it when at least this many staves are
+# found with the page turned 90 degrees (PageFacts.sideways_staff_count).
+# Across the examples the sideways pages have 10-14 such staves, and a
+# cover, a back cover or a text page 0 or 1 (a dark band or a frame).
+SIDEWAYS_MIN_STAVES = 3
+
 # Words that appear in the credits printed on the first page of a part or
 # score ("arr. Peter Kleine Schaars", "Words & Music by", "Glazba: ...").
 # re.IGNORECASE = case doesn't matter. \b = word boundary.
@@ -449,6 +455,30 @@ def _set_aside_unlisted_key(part: PartName) -> None:
         part.key = None
 
 
+# A part name is printed at the very top of the page: across all example
+# PDFs every real name sits in the top 15% (tullamore: 5%). Lower down, the
+# "header" can reach into the music when the first staves weren't found
+# (one-line percussion staves aren't counted as staves), and a cue there
+# ("Triangel", "Stringbass pizz.") would name the page. Same value as
+# page_analyzer.HEADER_MIN_BOTTOM (not imported: page_analyzer imports us).
+PART_NAME_MAX_Y = 0.15
+
+
+def _name_lines(facts: PageFacts) -> list[TextSpan]:
+    """
+    The header lines that may hold the page's part name: those starting in
+    the top PART_NAME_MAX_Y of the page.
+
+    The whole header counts on a page with credits ("arr.", "Music by"): it
+    is a first page, and a tall title block (a big logo) can push the name
+    lower. A page without a header gets no name at all, and so continues
+    the part before it.
+    """
+    if has_credits(facts.header):
+        return facts.header
+    return [span for span in facts.header if span.y0 < PART_NAME_MAX_Y]
+
+
 def classify_page(facts: PageFacts) -> PageInfo:
     """Turn the raw facts of one page into a PageInfo (see module docstring)."""
     info = PageInfo(
@@ -463,6 +493,15 @@ def classify_page(facts: PageFacts) -> PageInfo:
     if facts.ink_ratio < BLANK_INK_RATIO and count_letters(all_spans) == 0:
         info.kind = "blank"
         info.confidence = 1.0
+        return info
+
+    # 1b) Music printed sideways: no staves the normal way, but several with
+    #     the page turned. Its text can't be read either, so it becomes a
+    #     part of its own for a person to name (segment.py), never an extra
+    #     page that would be easy to miss.
+    if facts.staff_count == 0 and facts.sideways_staff_count >= SIDEWAYS_MIN_STAVES:
+        info.sideways = True
+        info.note = "music printed sideways"
         return info
 
     # 2) A text page (biography, program notes): front matter, no music.
@@ -486,8 +525,9 @@ def classify_page(facts: PageFacts) -> PageInfo:
         info.note = "instrument labels in margin"
         return info
 
-    # 4) Instrument part.
-    found = best_header_part(facts.header)
+    # 4) Instrument part. Its name comes from the TOP of the page only (see
+    #    _name_lines): a word lower down is inside the music.
+    found = best_header_part(_name_lines(facts))
     part_span = found[1] if found else None
     info.is_start = has_credits(facts.header) or _is_title_size(facts, part_span)
 

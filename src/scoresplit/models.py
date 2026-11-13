@@ -98,6 +98,10 @@ class PageFacts:
     staff_count: int = 0  # number of 5-line staves detected
     clef: str | None = None  # "treble", "bass" or None when unsure
     first_staff_y: float | None = None  # top of the first staff (0..1), None = no staves
+    # Staves found with the page turned 90 degrees. Only measured when no
+    # staves are found the normal way: a page printed sideways (Tullamore
+    # page 100) has music, but its staff lines run from top to bottom.
+    sideways_staff_count: int = 0
 
     # Note on ``field(default_factory=list)``: in Python you must NOT write
     # ``header: list = []`` in a dataclass, because all objects would share
@@ -174,6 +178,9 @@ class PageInfo:
     is_start: bool = False  # True = first page of a part (title/credits on it)
     clef: str | None = None
     has_staves: bool = False
+    # True = music printed sideways (staves only found with the page turned
+    # 90 degrees): it can't be read, so it becomes a part of its own.
+    sideways: bool = False
     confidence: float = 0.0  # 0..1, how sure we are about this page
     note: str = ""  # free text explaining the decision (for debugging)
 

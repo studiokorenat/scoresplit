@@ -36,6 +36,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pypdfium2 as pdfium
 
 from . import cache
@@ -368,6 +369,15 @@ def analyze_page(
         clef=detect_clef(gray, staves, ink_threshold),
         first_staff_y=first_staff_y,
     )
+    # No staves: maybe the music is printed sideways. np.rot90 turns the
+    # picture by 90 degrees, so lines that ran from top to bottom now run
+    # from left to right, where find_staves looks for them. (Which way it
+    # is turned doesn't matter: a staff is 5 lines either way.)
+    # np.ascontiguousarray makes a real copy of the turned picture, laid out
+    # row by row in memory, as the other image functions expect.
+    if not staves:
+        turned = np.ascontiguousarray(np.rot90(gray))
+        facts.sideways_staff_count = len(find_staves_on_page(turned)[0])
     header_region = (0.0, 0.0, 1.0, header_bottom(first_staff_y))
 
     # 3a) Text page: just sort the spans into regions. No OCR needed.

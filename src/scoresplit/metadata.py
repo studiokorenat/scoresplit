@@ -366,6 +366,36 @@ def _read_title_page(page_facts: PageFacts, info: PageInfo, votes: _Votes) -> No
             target.append((name, weight))
 
 
+def _confirm_titles(facts: list[PageFacts], votes: _Votes, voted: set[int]) -> None:
+    """
+    Give a title candidate one more vote for every music page that prints it
+    in its header (and did not vote already).
+
+    The covers alone can be a tie: tullamore's front cover's biggest text is
+    the publisher's series label "Concert Band", the title page says "LORD
+    TULLAMORE" and the back cover "publications", one vote each, and the
+    first one won. The real title is the one the music pages print on top
+    (here on every part's first page), so those pages settle it.
+
+    Only candidates that already have a vote count, and only a header line
+    that IS the candidate (loosely: case and punctuation ignored), so a
+    tempo or a part name on a music page never becomes the title.
+    """
+    candidates: dict[str, str] = {}  # loose key -> one spelling of it
+    for value, _weight in votes.titles:
+        candidates.setdefault(_loose(value), value)
+    if not candidates:
+        return
+    for page_facts in facts:
+        if page_facts.page_number in voted or page_facts.staff_count == 0:
+            continue  # this page voted already; a page without music isn't one
+        # A set: a title printed twice on one page still counts once.
+        printed = {_loose(span.text.strip(" -–:,|")) for span in page_facts.header}
+        for key, spelling in candidates.items():
+            if key in printed:
+                votes.titles.append((spelling, 1))
+
+
 def extract_metadata(
     facts: list[PageFacts], infos: list[PageInfo], min_pages: int = 1
 ) -> dict[str, str | None]:
@@ -378,11 +408,13 @@ def extract_metadata(
     `facts` and `infos` are the per-page lists, in the same page order.
     """
     votes = _Votes()
+    voted: set[int] = set()  # the page numbers read for the votes
     # zip() walks two lists side by side: (facts[0], infos[0]), (facts[1], infos[1]) ...
     # strict=True: raise an error if the two lists ever have different lengths.
     for page_facts, info in zip(facts, infos, strict=True):
         if info.is_start or (info.kind == "unknown" and bool(page_facts.body)):
             _read_title_page(page_facts, info, votes)
+            voted.add(page_facts.page_number)
 
     if not votes.titles:
         # No page looked like a title page: there was no "arr."/"Music by"
@@ -390,10 +422,13 @@ def extract_metadata(
         # with just "MARKO POKLEPOVIĆ", the title and the part name on top.
         # Every part page then IS a first page, so read them all.
         votes = _Votes()
+        voted = set()
         for page_facts, info in zip(facts, infos, strict=True):
             if info.kind == "part":
                 _read_title_page(page_facts, info, votes)
+                voted.add(page_facts.page_number)
 
+    _confirm_titles(facts, votes, voted)
     title = _vote(votes.titles)
     # Unlabelled names from both sides vote together (one per page, the right
     # side preferred), so a stray right-side fragment on ONE page can't beat

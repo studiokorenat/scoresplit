@@ -687,3 +687,27 @@ def test_a_missing_key_is_also_taken_for_a_pair_of_players() -> None:
     ]
     parts, _, _ = build_parts(pages)
     assert [(p.key, p.key_assumed) for p in parts] == [("Eb", False), ("Eb", True)]
+
+
+def test_a_page_printed_sideways_is_a_part_of_its_own_at_zero_confidence() -> None:
+    # Tullamore: page 100 is Trombone 1-2 printed sideways, between two
+    # parts. It is neither added to the part before it, nor an extra page.
+    pages = [
+        make_page(1, "Trombone", start=True, number_part="1"),
+        make_page(2, kind="unknown"),  # sideways
+        make_page(3, kind="unknown"),  # sideways too: the same part
+        make_page(4, "Trombone", number_part="3"),  # no title: still a new part
+        make_page(5, kind="unknown"),  # a back cover without music
+    ]
+    pages[1].sideways = pages[2].sideways = True
+    parts, extras, warnings = build_parts(pages)
+    assert [(p.name, p.pages, p.confidence) for p in parts] == [
+        ("Trombone 1", "1", 1.0),
+        ("Unknown Part (p2-3)", "2-3", 0.0),
+        ("Trombone 3", "4", 1.0),
+    ]
+    assert parts[1].instrument is None
+    assert parts[1].notes == [
+        "page printed sideways (or unreadable): please name it or join it to a part"
+    ]
+    assert [(e.reason, e.pages) for e in extras] == [("unassigned", "5")]

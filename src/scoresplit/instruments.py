@@ -1084,6 +1084,55 @@ GARBLED_SAXOPHONE_MIN_SCORE = 60
 GARBLED_SAXOPHONE_MIN_LENGTH = 6
 
 
+def _e_flat_read_as_dot(tokens: list[str], match: _Match) -> _Match:
+    """
+    "E. Bass" is "Eb Bass": OCR read the flat sign as a dot.
+
+    "e. bass" is also an abbreviation of Bass Guitar, and an abbreviation
+    found as a whole wins over a key in front of a name. So when the match
+    is an abbreviation that starts with such an "E." and the words after it
+    are a FULL instrument name that can be in Eb, the "E." is the key and
+    the match is only the name after it (find_part_name then reads "E."
+    as Eb, see _leading_key):
+
+        "E. Bass"  -> Bass, and "E." in front = Eb     (Tullamore)
+        "E.Bass"   -> Bass Guitar   (one word: no flat sign could be there)
+        "E. Hn."   -> English Horn  ("Hn." is itself abbreviated: the whole
+                                     name is an abbreviation, not a key + name)
+        "E. Gtr."  -> Electric Guitar (the same; a guitar is never in Eb)
+
+    ("E. Horn" never reaches this: "e. horn" is no abbreviation, so it is
+    read as Eb Horn, as in Tullamore. Rossroy prints "E. Horn" only on a
+    page that continues its "English Horn" part, which keeps that name.)
+    """
+    dictionary = load_dictionary()
+    matched_words = tokens[match.start : match.end]
+    if len(matched_words) < 2 or _leading_key(matched_words[0]) != "Eb":
+        return match
+    if lookup_form(" ".join(matched_words)) not in dictionary.abbreviations:
+        return match
+    rest = _best_instrument_match(matched_words[1:])
+    if (
+        rest is None
+        or rest.start != 0
+        or rest.end != len(matched_words) - 1  # the name must be ALL the other words
+        or rest.score < 100
+        or lookup_form(" ".join(matched_words[1:])) in dictionary.abbreviations
+        or "Eb" not in rest.instrument.keys
+    ):
+        return match
+    # Count the words from the whole text again: one word later than before.
+    return _Match(
+        rest.instrument,
+        rest.score,
+        match.start + 1,
+        match.end,
+        rest.alias,
+        rest.trusted,
+        rest.shown_as,
+    )
+
+
 def _garbled_saxophone(tokens: list[str]) -> list[str]:
     """
     Repair a "saxophone" that OCR garbled beyond normal fuzzy matching, after
@@ -1269,6 +1318,7 @@ def find_part_name(text: str) -> PartName | None:
     match = _best_instrument_match(tokens)
     if match is None:
         return None
+    match = _e_flat_read_as_dot(tokens, match)
     # How the instrument word(s) should appear in the printed name. The
     # "/"-joined second name below adds its own.
     shown = _shown_instrument_words(match)

@@ -362,8 +362,12 @@ def test_every_research_abbreviation_reads_right(entry: str, abbrev: str) -> Non
     expected = RESEARCH_NAME_IDS.get(abbrev.lower(), RESEARCH_ENTRY_IDS[entry])
     # The keyboard entry lists the piano's abbreviations too; "Cnt." is the
     # cornet, "Bar." the baritone, "Alt." the alto saxophone, "T. Hn." the
-    # tenor horn (its entry also holds the alto horn).
+    # tenor horn (its entry also holds the alto horn). "E. Bass" is an Eb
+    # bass with the flat read as a dot (Tullamore): a bass can be in Eb, so
+    # the "E." is its key (instruments._e_flat_read_as_dot); "E.Bass" written
+    # as one word stays the electric bass.
     expected = {
+        "E. Bass": "bass",
         "Pno.": "piano", "Pf.": "piano", "Cnt.": "cornet", "Crn.": "cornet",
         "Sous.": "sousaphone", "Bar.": "baritone", "Alt.": "alto_saxophone",
         "B♭ Bass": "bass", "E♭ Bass": "bass", "Mez.": "mezzo_voice", "T. Hn.": "tenor_horn",

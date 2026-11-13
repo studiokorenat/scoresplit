@@ -454,3 +454,37 @@ def test_json_mode_never_reads_the_saved_edits(tmp_path: Path, terminal: list[Pa
 )
 def test_split_is_the_command_when_none_is_given(typed: list[str], run: list[str]) -> None:
     assert cli.with_default_command(typed) == run
+
+
+# --- a part printed sideways: no name, confidence 0 -------------------------------
+
+
+def with_sideways_part(editor: Editor) -> None:
+    """Page 6 holds music printed sideways: a part of its own at 0% (segment.py)."""
+    editor.result.extra = [Extra(reason="cover", pages="1")]
+    editor.result.parts.append(
+        Part(
+            name="Unknown Part (p6)", pages="6", confidence=0.0,
+            notes=["page printed sideways (or unreadable): please name it or join it to a part"],
+        )
+    )
+
+
+def test_a_sideways_part_can_be_named(tmp_path: Path) -> None:
+    editor, _, _ = start_editor(tmp_path, "e 3", "Trumpet 2 in Bb", "", "", "tc", "x")
+    with_sideways_part(editor)
+    edited = editor.run()
+    assert edited is not None
+    part = edited.parts[2]
+    assert (part.name, part.instrument, part.key, part.pages) == ("Trumpet 2 in Bb", "trumpet", "Bb", "6")
+    assert (part.confidence, part.notes) == (1.0, [])
+
+
+def test_a_sideways_part_can_be_joined_to_another_part(tmp_path: Path) -> None:
+    # Give the Trumpet part page 6 as well, then delete the unknown part.
+    editor, _, _ = start_editor(tmp_path, "e 2", "", "4-6", "", "", "d 3", "x")
+    with_sideways_part(editor)
+    edited = editor.run()
+    assert edited is not None
+    assert [(part.name, part.pages) for part in edited.parts] == [("Flute 1", "2-3"), ("Trumpet", "4-6")]
+    assert [(e.reason, e.pages) for e in edited.extra] == [("cover", "1")]
