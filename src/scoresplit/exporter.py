@@ -209,7 +209,7 @@ def _name_has_key(part: Part) -> bool:
     return reading is not None and reading.key == part.key
 
 
-def part_filename(part: Part) -> str:
+def part_filename(part: Part, max_bytes: int = MAX_FILENAME_BYTES) -> str:
     """
     The file name of a part's PDF: <name>_<key>_<clef>_pages_<pages>.pdf
 
@@ -231,17 +231,34 @@ def part_filename(part: Part) -> str:
         clef (alto, tenor, percussion), none, mixed clefs (piano: None) and
         the conductor score get no sign;
       * the pages: "pages_5-7", or "pages_5-7_9" for several ranges.
+
+    The whole name, ".pdf" included, is at most ``max_bytes`` bytes. When
+    it would be longer, the name is shortened (from the end): the key, clef
+    and pages tell files apart better than the end of a very long name.
     """
-    pieces = [_filename_words(part.name)]
+    name = _filename_words(part.name)
+    key = ""
+    clef_sign = ""
     if part.kind != "score":
         if part.key and not _name_has_key(part):
-            pieces.append(_filename_words(part.key))
-        # .get() gives None for a clef that isn't in CLEF_SIGNS.
-        clef_sign = CLEF_SIGNS.get(part.clef or "")
-        if clef_sign:
-            pieces.append(clef_sign)
-    pieces.append(_pages_for_filename(part.page_list()))
-    return "_".join(pieces) + ".pdf"
+            key = _filename_words(part.key)
+        # .get() gives "" for a clef that isn't in CLEF_SIGNS.
+        clef_sign = CLEF_SIGNS.get(part.clef or "", "")
+    pages = _pages_for_filename(part.page_list())
+
+    # The end that is always kept whole: clef, pages and ".pdf". It is at
+    # most about 55 bytes (the page list is capped by MAX_PAGES_IN_FILENAME).
+    # filter(None, ...) drops an empty clef sign: no "__pages".
+    ending = "_".join(filter(None, [clef_sign, pages])) + ".pdf"
+    # The bytes left for the name and the key, with a "_" after each.
+    room = max_bytes - _byte_length(ending)
+    # A real key is short ("Bb"), so normally it fits whole. Only a garbage
+    # key typed into an edits file can be long; then it is cut too.
+    key = _cut_bytes(key, room - 1)
+    if key:
+        room -= _byte_length(key) + 1
+    name = _cut_bytes(name, room - 1)
+    return "_".join(filter(None, [name, key, ending]))
 
 
 def extra_filename(extra: Extra) -> str:
@@ -250,6 +267,11 @@ def extra_filename(extra: Extra) -> str:
     Long page lists are shortened: "blank_40_pages_6-234.pdf".
     """
     return f"{extra.reason}_{_pages_for_filename(extra.page_list())}.pdf"
+
+
+def _byte_length(text: str) -> int:
+    """How many bytes `text` takes in UTF-8 ("Š" takes 2, "S" takes 1)."""
+    return len(text.encode("utf-8"))
 
 
 def _cut_bytes(text: str, limit: int) -> str:
@@ -307,10 +329,13 @@ def part_filenames(result: Result) -> dict[int, str]:
     # enumerate(..., start=1) counts 1, 2, 3 ... instead of 0, 1, 2 ...
     for row, index in enumerate(exported, start=1):
         number = str(row).zfill(digits)  # zfill pads with zeros: "1" -> "01"
-        rest = part_filename(result.parts[index])
+        # The part's own name gets the room left after the number and its
+        # "_". It is only shortened when it can't fit even without credits.
+        rest = part_filename(result.parts[index], MAX_FILENAME_BYTES - len(number) - 1)
         # The bytes left for the credits: the limit, less the number, the
-        # rest and the two "_" between the three pieces.
-        room = MAX_FILENAME_BYTES - len(number) - len(rest.encode("utf-8")) - 2
+        # rest and the two "_" between the three pieces. When nothing is
+        # left, _cut_bytes gives "" and the credits are left out.
+        room = MAX_FILENAME_BYTES - len(number) - _byte_length(rest) - 2
         short_credits = _cut_bytes(credits, room)
         # filter(None, ...) drops empty pieces: no "01__Flute" without credits.
         names[index] = "_".join(filter(None, [number, short_credits, rest]))

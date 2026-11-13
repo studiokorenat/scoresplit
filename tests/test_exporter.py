@@ -13,7 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from scoresplit.exporter import export_parts, extra_filename, part_filename
+from scoresplit.exporter import (
+    MAX_FILENAME_BYTES,
+    MAX_NAME_BYTES,
+    export_parts,
+    extra_filename,
+    part_filename,
+    part_filenames,
+    safe_filename,
+)
 from scoresplit.models import Extra, Part, Result
 
 # The tiny-PDF and result helpers of the other exporter tests.
@@ -120,6 +128,72 @@ def test_a_very_long_name_stays_within_the_file_name_limit() -> None:
     name = part_filename(part)
     assert len(name.encode("utf-8")) < 255  # the limit of most file systems
     assert name.endswith("_Bb_tc_pages_1-2.pdf")
+
+
+def _byte_length(name: str) -> int:
+    """How many bytes a file name takes on disk (UTF-8)."""
+    return len(name.encode("utf-8"))
+
+
+# The part of review step 2 that crashed `split` (OSError: File name too
+# long): the name alone is under the 200-byte cap, but with the row number,
+# key, clef and a long page list the whole file name went over 255 bytes.
+LONG_NAME = "Shaker Tambourine Wind Chimes " * 8
+LONG_PAGES = "100-101,103-104,106-107,109-110,112-113"
+
+
+def _long_parts_result(name: str) -> Result:
+    result = make_map(
+        [Part(name=name, key="Bb", clef="treble", pages=LONG_PAGES)], page_count=120
+    )
+    result.title = "A Long Title"
+    result.arranger = "Some Arranger"
+    return result
+
+
+@pytest.mark.parametrize("name", [LONG_NAME, "š" * 150], ids=["ascii", "two-byte letters"])
+def test_a_long_part_name_is_shortened_to_fit_the_file_name_limit(name: str) -> None:
+    file_name = part_filenames(_long_parts_result(name))[0]
+    assert _byte_length(file_name) <= MAX_FILENAME_BYTES
+    # The key, clef and pages are kept: the name is shortened instead.
+    assert file_name.endswith("_Bb_tc_pages_100-101_103-104_106-107_109-110_112-113.pdf")
+    # The credits went first (the part's own name matters more), and what
+    # is left of the name is still its start.
+    assert file_name.startswith("01_" + name.replace(" ", "_")[:20])
+    # decode() would fail if a two-byte letter had been cut in half.
+    file_name.encode("utf-8").decode("utf-8")
+
+
+def test_a_garbage_key_from_an_edits_file_cannot_make_the_name_too_long() -> None:
+    # The key is free text in an edits file, so it can be just as long.
+    part = Part(name=LONG_NAME, key="X" * 300, clef="treble", pages=LONG_PAGES)
+    file_name = part_filenames(make_map([part], page_count=120))[0]
+    assert _byte_length(file_name) <= MAX_FILENAME_BYTES
+    assert file_name.endswith("_tc_pages_100-101_103-104_106-107_109-110_112-113.pdf")
+
+
+def test_split_writes_a_part_with_a_very_long_name(tmp_path: Path) -> None:
+    pdf = make_pdf(tmp_path / "score.pdf", 120)
+    target, written = export_parts(_long_parts_result(LONG_NAME), pdf, tmp_path / "out")
+    part_file = written[0].path
+    assert part_file.exists()
+    assert page_count_of(part_file) == 10
+    assert _byte_length(part_file.name) <= MAX_FILENAME_BYTES
+
+
+def test_the_longest_extra_file_name_is_short() -> None:
+    # The longest reason, and the longest page list that isn't shortened.
+    scattered = list(range(1, 200, 2))  # 1, 3, 5 ... 199
+    name = extra_filename(Extra(reason="unassigned", pages=scattered))
+    assert _byte_length(name) <= MAX_FILENAME_BYTES
+    assert _byte_length(name) < 100
+
+
+def test_the_main_folder_name_stays_below_the_limit() -> None:
+    result = make_map([Part(name="Flute", pages="1")])
+    result.title = "Š" * 300
+    result.arranger = "Ž" * 300
+    assert _byte_length(safe_filename(result.folder_name())) <= MAX_NAME_BYTES < 255
 
 
 def test_extra_file_names() -> None:
