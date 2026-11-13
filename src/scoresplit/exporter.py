@@ -88,6 +88,8 @@ CREDIT_FIELDS = [name for name in Result.model_fields if name not in ("parts", "
 # per group of extra pages), then "file" = where that PDF was written,
 # relative to the main folder ("" when it wasn't written), then the
 # credits, repeated on every row so each row stands on its own.
+# The names must all differ (a part field named like a credit would be
+# overwritten on every row); tests/test_exporter.py checks this.
 CSV_COLUMNS = [*PART_FIELDS, "file", *CREDIT_FIELDS]
 
 # How a list (a part's notes, the warnings) is written in ONE CSV cell.
@@ -498,6 +500,41 @@ def _xml_safe(text: str) -> str:
     return XML_FORBIDDEN.sub("", text)
 
 
+def _xml_item_name(field: str) -> str:
+    """
+    The element name for ONE item of a list field:
+
+        "warnings" -> "warning", "notes" -> "note", "tags" -> "tag"
+
+    The rule is simply "drop the trailing s". A list field whose name
+    doesn't end in "s" gets "item" (<stuff><item>...</item></stuff>).
+    """
+    if field.endswith("s") and len(field) > 1:
+        return field[:-1]  # [:-1] = everything except the last letter
+    return "item"
+
+
+def _add_xml_field(parent: ET.Element, field: str, value: object) -> None:
+    """
+    Add one field to `parent` (the <scoresplit> root or a <part>):
+
+        "title", "Song"          -> <title>Song</title>
+        "notes", ["a", "b"]      -> <notes><note>a</note><note>b</note></notes>
+        "notes", []              -> <notes />
+
+    Which fields are lists is read from the VALUE, not from the field
+    name, so a list field added to Part or Result later becomes child
+    elements by itself, the same way the JSON holds a real list.
+    """
+    if isinstance(value, list):
+        list_element = ET.SubElement(parent, field)
+        item_name = _xml_item_name(field)
+        for item in value:
+            ET.SubElement(list_element, item_name).text = _xml_safe(_cell(item))
+    else:
+        ET.SubElement(parent, field).text = _xml_safe(_cell(value))
+
+
 def _write_xml(data: dict, path: Path) -> None:
     """
     The export data as XML:
@@ -522,24 +559,13 @@ def _write_xml(data: dict, path: Path) -> None:
     for field in CREDIT_FIELDS:
         if field == "schema_version":
             continue  # already an attribute of <scoresplit>
-        if field == "warnings":
-            warnings_element = ET.SubElement(root, "warnings")
-            for warning in data["warnings"]:
-                ET.SubElement(warnings_element, "warning").text = _xml_safe(warning)
-        else:
-            ET.SubElement(root, field).text = _xml_safe(_cell(data[field]))
+        _add_xml_field(root, field, data[field])
 
     parts_element = ET.SubElement(root, "parts")
     for part in data["parts"]:
         part_element = ET.SubElement(parts_element, "part")
         for field, value in part.items():
-            if field == "notes":
-                # One <note> per note, instead of one joined text.
-                notes_element = ET.SubElement(part_element, "notes")
-                for note in value:
-                    ET.SubElement(notes_element, "note").text = _xml_safe(note)
-            else:
-                ET.SubElement(part_element, field).text = _xml_safe(_cell(value))
+            _add_xml_field(part_element, field, value)
 
     extra_element = ET.SubElement(root, "extra")
     for extra in data["extra"]:

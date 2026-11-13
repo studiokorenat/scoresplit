@@ -14,8 +14,12 @@ from pathlib import Path
 import pytest
 
 from scoresplit.exporter import (
+    CREDIT_FIELDS,
+    CSV_COLUMNS,
     MAX_FILENAME_BYTES,
     MAX_NAME_BYTES,
+    PART_FIELDS,
+    _write_xml,
     export_parts,
     extra_filename,
     part_filename,
@@ -424,3 +428,46 @@ def test_extra_pages_not_written_are_still_listed_without_a_file(tmp_path: Path)
     assert [(extra["reason"], extra["file"]) for extra in data["extra"]] == [
         ("cover", ""), ("unassigned", ""), ("blank", ""),
     ]
+
+
+# Each CSV row is {**part, **credits}: a part's fields merged with the
+# fields of the whole result. If Part and Result ever got a field with the
+# same name, the result's value would silently replace the part's on every
+# row, and the header would have that column twice. These two tests make
+# such a clash fail here instead of quietly corrupting the CSV.
+# (A test, not an assert in exporter.py: "python -O" turns asserts off.)
+
+
+def test_part_fields_and_credit_fields_share_no_name() -> None:
+    # isdisjoint = "the two have no name in common".
+    assert set(PART_FIELDS).isdisjoint(CREDIT_FIELDS)
+
+
+def test_the_csv_columns_have_no_duplicates() -> None:
+    # A set drops duplicates, so the lengths differ when a name is there
+    # twice (this also covers the extra "file" column between the two lists).
+    assert len(set(CSV_COLUMNS)) == len(CSV_COLUMNS)
+
+
+# The XML finds the list fields by their VALUE (a list), not by their name,
+# so a list field added later becomes child elements by itself, like in the
+# JSON. "tags" is a made-up field that Part doesn't have today.
+
+
+def test_a_new_list_field_becomes_child_elements_in_the_xml(tmp_path: Path) -> None:
+    pdf, result = _example(tmp_path)
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+    data["parts"][0]["tags"] = ["brass", "solo"]  # a list field nobody named in exporter.py
+    data["parts"][1]["tags"] = []
+
+    xml_path = tmp_path / "tags.xml"
+    _write_xml(data, xml_path)
+
+    parts = ET.parse(xml_path).getroot().findall("parts/part")
+    # One <tag> per item ("tags" without its "s"), not one joined "brass | solo".
+    assert [tag.text for tag in parts[0].findall("tags/tag")] == ["brass", "solo"]
+    # No joined text in <tags> itself (only the indentation ET.indent adds).
+    assert parts[0].findtext("tags").strip() == ""
+    assert parts[1].find("tags") is not None  # an empty list: an empty <tags/>
+    assert parts[1].findall("tags/tag") == []
