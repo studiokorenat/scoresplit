@@ -253,6 +253,17 @@ def test_drops_compares_with_the_baseline() -> None:
     assert precision.drops(better_or_same, baseline) == []
 
 
+def test_drops_skips_a_lower_count_the_baseline_does_not_have() -> None:
+    baseline = precision.score(GOLDEN, GOLDEN).counts()
+    # A baseline from before "parts_extra" existed: no crash, nothing reported,
+    # even though the new run has extra parts.
+    old_baseline = {name: value for name, value in baseline.items() if name != "parts_extra"}
+    assert precision.drops(baseline | {"parts_extra": 2}, old_baseline) == []
+    # When the baseline does have it, a real increase is still reported.
+    assert precision.drops(baseline | {"parts_extra": 2}, baseline) == [
+        "parts_extra went up from 0 to 2",
+    ]
+
 def test_draft_pdf_adds_pdf_only_when_missing() -> None:
     # A dot inside the name stays: "my.score" is not cut to "my".
     assert precision.draft_pdf("my.score") == precision.EXAMPLES / "my.score.pdf"

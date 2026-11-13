@@ -539,12 +539,19 @@ def drops(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
     """
     worse = []
     for name in HIGHER_IS_BETTER:
-        # .get(name, 0): a count the baseline doesn't have yet (a new column) can't drop.
-        if counts[name] < baseline.get(name, 0):
-            worse.append(f"{name} went down from {baseline[name]} to {counts[name]}")
+        # .get(name, 0): a count the baseline doesn't have yet (a new column)
+        # counts as 0, and nothing can go down from 0, so it can't drop.
+        before = baseline.get(name, 0)
+        if counts[name] < before:
+            worse.append(f"{name} went down from {before} to {counts[name]}")
     for name in LOWER_IS_BETTER:
-        if counts[name] > baseline[name]:
-            worse.append(f"{name} went up from {baseline[name]} to {counts[name]}")
+        # A count the baseline doesn't have yet is skipped: with nothing to
+        # compare against, it can't "go up". (baseline[name] would crash here.)
+        if name not in baseline:
+            continue
+        before = baseline[name]
+        if counts[name] > before:
+            worse.append(f"{name} went up from {before} to {counts[name]}")
     return worse
 
 
