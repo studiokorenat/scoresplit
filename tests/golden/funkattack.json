@@ -1,0 +1,38 @@
+{
+  "title": "Funkattack",
+  "composer": "Otto M. Schwarz",
+  "arranger": null,
+  "parts": [
+    {"name": "Conductor Score", "instrument": "score", "number": null, "key": null, "clef": null, "pages": "7-26", "export": true},
+    {"name": "Flute 1&2", "instrument": "flute", "number": "1&2", "key": "C", "clef": "treble", "pages": "27-28", "export": true},
+    {"name": "Oboe", "instrument": "oboe", "number": null, "key": "C", "clef": "treble", "pages": "29-30", "export": true},
+    {"name": "Bassoon", "instrument": "bassoon", "number": null, "key": "C", "clef": "bass", "pages": "31-32", "export": true},
+    {"name": "Bb Clarinet 1", "instrument": "clarinet", "number": "1", "key": "Bb", "clef": "treble", "pages": "33-34", "export": true},
+    {"name": "Bb Clarinet 2", "instrument": "clarinet", "number": "2", "key": "Bb", "clef": "treble", "pages": "35-36", "export": true},
+    {"name": "Bb Clarinet 3", "instrument": "clarinet", "number": "3", "key": "Bb", "clef": "treble", "pages": "37-38", "export": true},
+    {"name": "Bb Bass Clarinet", "instrument": "bass_clarinet", "number": null, "key": "Bb", "clef": "treble", "pages": "39-40", "export": true},
+    {"name": "Eb Alto Saxophone 1&2", "instrument": "alto_saxophone", "number": "1&2", "key": "Eb", "clef": "treble", "pages": "41-42", "export": true},
+    {"name": "Bb Tenor Saxophone 1&2", "instrument": "tenor_saxophone", "number": "1&2", "key": "Bb", "clef": "treble", "pages": "43-44", "export": true},
+    {"name": "Eb Baritone Saxophone", "instrument": "baritone_saxophone", "number": null, "key": "Eb", "clef": "treble", "pages": "45-46", "export": true},
+    {"name": "Bb Trumpet 1", "instrument": "trumpet", "number": "1", "key": "Bb", "clef": "treble", "pages": "47-48", "export": true},
+    {"name": "Bb Trumpet 2", "instrument": "trumpet", "number": "2", "key": "Bb", "clef": "treble", "pages": "49-50", "export": true},
+    {"name": "Bb Trumpet 3", "instrument": "trumpet", "number": "3", "key": "Bb", "clef": "treble", "pages": "51-52", "export": true},
+    {"name": "F Horn 1&2", "instrument": "horn", "number": "1&2", "key": "F", "clef": "treble", "pages": "53-54", "export": true},
+    {"name": "F Horn 3&4", "instrument": "horn", "number": "3&4", "key": "F", "clef": "treble", "pages": "55-56", "export": true},
+    {"name": "Trombone 1", "instrument": "trombone", "number": "1", "key": "C", "clef": "bass", "pages": "57-58", "export": true},
+    {"name": "Trombone 2", "instrument": "trombone", "number": "2", "key": "C", "clef": "bass", "pages": "59-60", "export": true},
+    {"name": "Trombone 3", "instrument": "trombone", "number": "3", "key": "C", "clef": "bass", "pages": "61-62", "export": true},
+    {"name": "Bb Euphonium", "instrument": "euphonium", "number": null, "key": "Bb", "clef": "treble", "pages": "63-64", "export": true},
+    {"name": "Bb Euphonium", "instrument": "euphonium", "number": null, "key": "C", "clef": "bass", "pages": "65-66", "export": true},
+    {"name": "Eb Bass", "instrument": "bass", "number": null, "key": "Eb", "clef": "bass", "pages": "67-68", "export": true},
+    {"name": "Bb Bass", "instrument": "bass", "number": null, "key": "Bb", "clef": "bass", "pages": "69-70", "export": true},
+    {"name": "Bass/Electric Bass", "instrument": "bass_guitar", "number": null, "key": null, "clef": "bass", "pages": "71-72", "export": true},
+    {"name": "Timpani", "instrument": "timpani", "number": null, "key": null, "clef": "bass", "pages": "73", "export": true},
+    {"name": "Mallet Percussion 2", "instrument": "mallets", "number": "2", "key": null, "clef": "treble", "pages": "74", "export": true},
+    {"name": "Percussion 1", "instrument": "percussion", "number": "1", "key": null, "clef": null, "pages": "75-77", "export": true},
+    {"name": "Percussion 2", "instrument": "percussion", "number": "2", "key": null, "clef": null, "pages": "78-79", "export": true}
+  ],
+  "extra": [
+    {"reason": "cover", "pages": "1-6"}
+  ]
+}

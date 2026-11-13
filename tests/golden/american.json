@@ -1,0 +1,40 @@
+{
+  "title": "American Graphity",
+  "composer": null,
+  "arranger": "Naohiro Iwai",
+  "parts": [
+    {"name": "Conductor Score", "instrument": "score", "number": null, "key": null, "clef": null, "pages": "2-29", "export": true},
+    {"name": "Piccolo", "instrument": "piccolo", "number": null, "key": "C", "clef": "treble", "pages": "30-31", "export": true},
+    {"name": "1. & 2. Flute", "instrument": "flute", "number": "1&2", "key": "C", "clef": "treble", "pages": "32-33", "export": true},
+    {"name": "Bassoon", "instrument": "bassoon", "number": null, "key": "C", "clef": "bass", "pages": "34-35", "export": true},
+    {"name": "Eb Clarinet", "instrument": "clarinet", "number": null, "key": "Eb", "clef": "treble", "pages": "36-37", "export": true},
+    {"name": "1. Bb Clarinet", "instrument": "clarinet", "number": "1", "key": "Bb", "clef": "treble", "pages": "38-39", "export": true},
+    {"name": "2. Bb Clarinet", "instrument": "clarinet", "number": "2", "key": "Bb", "clef": "treble", "pages": "40-41", "export": true},
+    {"name": "3. Bb Clarinet", "instrument": "clarinet", "number": "3", "key": "Bb", "clef": "treble", "pages": "42-43", "export": true},
+    {"name": "Bb Soprano Saxophone", "instrument": "soprano_saxophone", "number": null, "key": "Bb", "clef": "treble", "pages": "44-45", "export": true},
+    {"name": "1. & 2. Eb Alto Sax.", "instrument": "alto_saxophone", "number": "1&2", "key": "Eb", "clef": "treble", "pages": "46-47", "export": true},
+    {"name": "1./2. Bb Tenor Sax.", "instrument": "tenor_saxophone", "number": "1&2", "key": "Bb", "clef": "treble", "pages": "48-49", "export": true},
+    {"name": "Eb Baritone Sax.", "instrument": "baritone_saxophone", "number": null, "key": "Eb", "clef": "treble", "pages": "50-51", "export": true},
+    {"name": "1. Bb Trumpet", "instrument": "trumpet", "number": "1", "key": "Bb", "clef": "treble", "pages": "52-53", "export": true},
+    {"name": "2. Bb Trumpet", "instrument": "trumpet", "number": "2", "key": "Bb", "clef": "treble", "pages": "54-55", "export": true},
+    {"name": "3. & 4. Bb Trumpet", "instrument": "trumpet", "number": "3&4", "key": "Bb", "clef": "treble", "pages": "56-57", "export": true},
+    {"name": "1. Eb Horn", "instrument": "horn", "number": "1", "key": "Eb", "clef": "treble", "pages": "58-59", "export": true},
+    {"name": "1. & 2. F Horn", "instrument": "horn", "number": "1&2", "key": "F", "clef": "treble", "pages": "60-61", "export": true},
+    {"name": "3. & 4. F Horn", "instrument": "horn", "number": "3&4", "key": "F", "clef": "treble", "pages": "62-63", "export": true},
+    {"name": "1. C Trombone", "instrument": "trombone", "number": "1", "key": "C", "clef": "bass", "pages": "64-65", "export": true},
+    {"name": "2. & 3. C Trombone", "instrument": "trombone", "number": "2&3", "key": "C", "clef": "bass", "pages": "66-67", "export": true},
+    {"name": "C Baritone/Euphonium", "instrument": "baritone", "number": null, "key": "C", "clef": "bass", "pages": "68-69", "export": true},
+    {"name": "Bb Bass", "instrument": "bass", "number": null, "key": "Bb", "clef": "treble", "pages": "70-71", "export": true},
+    {"name": "Bb Bass", "instrument": "bass", "number": null, "key": "Bb", "clef": "bass", "pages": "72-73", "export": true},
+    {"name": "Eb Bass", "instrument": "bass", "number": null, "key": "Eb", "clef": "treble", "pages": "74-75", "export": true},
+    {"name": "Eb Bass", "instrument": "bass", "number": null, "key": "Eb", "clef": "bass", "pages": "76-77", "export": true},
+    {"name": "Drums", "instrument": "drum_set", "number": null, "key": null, "clef": "bass", "pages": "78-79", "export": true},
+    {"name": "Cabasa, Claves & Tambourine", "instrument": "tambourine", "number": null, "key": null, "clef": null, "pages": "80", "export": true},
+    {"name": "Maracas, Cymbals & Suspended Cymbal", "instrument": "cymbals", "number": null, "key": null, "clef": null, "pages": "81", "export": true},
+    {"name": "Bongo", "instrument": "congas", "number": null, "key": null, "clef": null, "pages": "82-83", "export": true},
+    {"name": "Conga", "instrument": "congas", "number": null, "key": null, "clef": null, "pages": "84", "export": true}
+  ],
+  "extra": [
+    {"reason": "cover", "pages": "1"}
+  ]
+}

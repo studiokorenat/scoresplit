@@ -1,0 +1,39 @@
+{
+  "title": "Deep Purple Medley",
+  "composer": "R. Blackmore / J. Lord / D. Coverdale / I. Paice / R. Glover / I. Gillan",
+  "arranger": "Toshihiko Sahashi",
+  "parts": [
+    {"name": "Conductor Score", "instrument": "score", "number": null, "key": null, "clef": null, "pages": "3-35", "export": true},
+    {"name": "Piccolo", "instrument": "piccolo", "number": null, "key": "C", "clef": "treble", "pages": "36-37", "export": true},
+    {"name": "Flute 1-2", "instrument": "flute", "number": "1-2", "key": "C", "clef": "treble", "pages": "38-39", "export": true},
+    {"name": "Oboe", "instrument": "oboe", "number": null, "key": "C", "clef": "treble", "pages": "40-41", "export": true},
+    {"name": "Eb Clarinet", "instrument": "clarinet", "number": null, "key": "Eb", "clef": "treble", "pages": "42-43", "export": true},
+    {"name": "Bb Clarinet 2", "instrument": "clarinet", "number": "2", "key": "Bb", "clef": "treble", "pages": "44-45", "export": true},
+    {"name": "Bb Clarinet 3", "instrument": "clarinet", "number": "3", "key": "Bb", "clef": "treble", "pages": "46-47", "export": true},
+    {"name": "Bb Bass Clarinet", "instrument": "bass_clarinet", "number": null, "key": "Bb", "clef": "treble", "pages": "48-51", "export": true},
+    {"name": "Eb Alto Saxophone 1-2", "instrument": "alto_saxophone", "number": "1-2", "key": "Eb", "clef": "treble", "pages": "52-53", "export": true},
+    {"name": "Bb Tenor Saxophone", "instrument": "tenor_saxophone", "number": null, "key": "Bb", "clef": "treble", "pages": "54-55", "export": true},
+    {"name": "Bb Soprano Saxophone", "instrument": "soprano_saxophone", "number": null, "key": "Bb", "clef": "treble", "pages": "56-57", "export": true},
+    {"name": "Sax. Barítono", "instrument": "baritone_saxophone", "number": null, "key": "Eb", "clef": "treble", "pages": "58-59", "export": true},
+    {"name": "Bb Flugel Horn 1", "instrument": "flugelhorn", "number": "1", "key": "Bb", "clef": "treble", "pages": "60-61", "export": true},
+    {"name": "Bb Flugel Horn 2", "instrument": "flugelhorn", "number": "2", "key": "Bb", "clef": "treble", "pages": "62-63", "export": true},
+    {"name": "F Horn 1-3", "instrument": "horn", "number": "1-3", "key": "F", "clef": "treble", "pages": "64-65", "export": true},
+    {"name": "F Horn 2-4", "instrument": "horn", "number": "2-4", "key": "F", "clef": "treble", "pages": "66-67", "export": true},
+    {"name": "Eb Horn 2-4", "instrument": "horn", "number": "2-4", "key": "Eb", "clef": "treble", "pages": "68-69", "export": true},
+    {"name": "Bb Baritone/Euphonium", "instrument": "baritone", "number": null, "key": "Bb", "clef": "treble", "pages": "70-71", "export": true},
+    {"name": "C Trombone 1-2", "instrument": "trombone", "number": "1-2", "key": "C", "clef": "bass", "pages": "72-73", "export": true},
+    {"name": "C Trombone 3", "instrument": "trombone", "number": "3", "key": "C", "clef": "bass", "pages": "74-75", "export": true},
+    {"name": "Bb Tenor Tuba/Euphonium", "instrument": "euphonium", "number": null, "key": "Bb", "clef": "bass", "pages": "76-77", "export": true},
+    {"name": "C Baritone", "instrument": "baritone", "number": null, "key": "C", "clef": "bass", "pages": "78-79", "export": true},
+    {"name": "Eb Bass", "instrument": "bass", "number": null, "key": "Eb", "clef": "treble", "pages": "80-81", "export": true},
+    {"name": "Bb Bass", "instrument": "bass", "number": null, "key": "Bb", "clef": "bass", "pages": "82-83", "export": true},
+    {"name": "Bb Bass", "instrument": "bass", "number": null, "key": "Bb", "clef": "bass", "pages": "84-85", "export": false},
+    {"name": "Percussion 1", "instrument": "percussion", "number": "1", "key": null, "clef": null, "pages": "86", "export": true},
+    {"name": "Percussion 2", "instrument": "percussion", "number": "2", "key": null, "clef": null, "pages": "87-88", "export": true},
+    {"name": "Timbales", "instrument": "timbales", "number": null, "key": null, "clef": "bass", "pages": "89-90", "export": true},
+    {"name": "Percussion 3", "instrument": "percussion", "number": "3", "key": null, "clef": null, "pages": "91", "export": true}
+  ],
+  "extra": [
+    {"reason": "cover", "pages": "1-2"}
+  ]
+}

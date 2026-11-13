@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Example scores (copyrighted, large). Kept locally for the golden tests in
+# tests/test_examples.py, which skip themselves when a file is missing.
+/example/
+
+# Private working notes: the trail learnings, the Claude Code settings and the
+# docs folders stay on disk but are not part of the public repository.
+/.trail/
+/.docs/
+/.claude/
+/docs/

@@ -1,0 +1,790 @@
+# =============================================================================
+# instruments.yaml: the dictionary scoresplit uses to recognise part names.
+#
+# You can extend this file WITHOUT touching any Python code.
+#
+# Each entry has:
+#   id:       a machine name: lowercase letters, digits and "_". It is used
+#             in the JSON page map and by programs that read it.
+#   name:     the display name used for output folders and files ("Clarinet").
+#   family:   woodwind | brass | percussion | keyboard | strings | voice | other
+#             Used to tell a conductor score (many families on one page) from a
+#             percussion part (many percussion instruments on one page).
+#   aliases:  full names in any language, lowercase. Matched FUZZILY, so small
+#             OCR errors still match ("buphonium" -> euphonium, "hom" -> horn).
+#             Only aliases of 4 or more letters are fuzzy-matched.
+#             Accents don't matter: "flûte" also matches "Flute", and "flute"
+#             also matches "Flûte", so each name is written only once.
+#             (Write it with its accents, the way it is printed.)
+#   exact:    (optional) full names like `aliases`, but matched only EXACTLY
+#             (accents still don't matter). For short foreign words that a
+#             one-letter OCR slip would find in ordinary text: "basse" in
+#             "based", "piatti" in "Poco più" read as "Poco pitt", "alcorno"
+#             in "Giacomo". Also for names written with a short word that
+#             are still full part names in a header ("Bass Cl.", "Bari.
+#             Sax."): an abbreviation is skipped there, an `exact` name not.
+#             Unlike an abbreviation, an exact name ending in a dot is not
+#             also found without it: list both ("bass cl.", "bass cl").
+#   abbrevs:  short forms used in score margins ("picc.", "tpt."). Matched
+#             EXACTLY (ignoring upper/lower case and accents). Abbreviations
+#             of 2 letters must be written with their dot ("fl.") to avoid
+#             false hits. Spaces after the dots don't matter: "c. a." also
+#             matches "C.A." and the other way round.
+#   generic:  (optional) `generic: true` marks a name that doesn't say WHICH
+#             instrument it is: "Saxophone" (alto? tenor?), "Percussion",
+#             "Bass", "Voice". Two names joined by a slash with a generic one
+#             first ("Saxophone/Alto Saxophone", "Mallets/Xylophone") are read
+#             as the second, specific instrument. A generic instrument with
+#             `keys` never gets a default key: with no key printed, the part
+#             keeps no key and gets a "key not printed: please check" note.
+#   keys:     (optional) the keys this instrument is written in, the DEFAULT
+#             KEY FIRST. Spell them as scoresplit prints them: C, Db, D, Eb,
+#             F, G, Ab, A, Bb. A typo stops the program at once with an error.
+#             A part with no printed key gets the default key ("Clarinet 1"
+#             -> Bb). A printed key the instrument is never written in (not
+#             in its list: "Bass Clarinet in Eb") is taken as misread,
+#             usually by OCR: the default key is used, with a note.
+#             Instruments WITHOUT a `keys` list keep any printed key, with an
+#             "unusual key" note.
+#   treble_clef_key: (optional) the key of a part in TREBLE clef that has no
+#             printed key. Euphonium, baritone and trombone parts often come
+#             twice, in treble clef (written in Bb) and in bass clef (concert
+#             pitch, C), with no key in the name: `treble_clef_key: Bb` gives
+#             the treble one the key Bb and the bass one the key C. Must be
+#             one of the instrument's `keys`, and C must be in them too.
+#   clef:     (optional) `treble` or `bass`, only for an instrument that is
+#             written in ONE clef (trumpet -> treble, bassoon -> bass). A part
+#             whose clef is neither printed in its name nor detected on its
+#             pages gets this clef, marked as assumed (like a filled-in key).
+#             Leave it out for instruments written in either clef (trombone,
+#             euphonium, baritone, tuba, the generic bass: an "Eb Bass" can
+#             be in treble clef), keyboards and unpitched percussion. Can't
+#             be used together with `treble_clef_key` (that one is for
+#             two-clef instruments).
+#   implied_keys: (optional) names that SAY the key without printing it:
+#             `implied_keys: {Eb: [mali klarinet]}` - the "small clarinet"
+#             is the clarinet in Eb. Each name must also be in `aliases` or
+#             `abbrevs`, each key in `keys`. A printed key still wins.
+#
+# Names in English, German, Italian, French, Dutch, Spanish and Croatian/
+# Serbian (Latin script only). Most come from the research in
+# tests/data/instrument_research.json.
+# ORDER MATTERS A LITTLE: when two entries match equally well, the one with
+# the LONGER alias wins ("bass clarinet" beats "clarinet"). So you don't need
+# to sort the file.
+#
+# To add a new instrument, copy an entry and change it. To teach scoresplit a
+# new spelling (e.g. Croatian "rog" for horn), just add it to aliases.
+# =============================================================================
+
+instruments:
+  # --------------------------------------------------------------- woodwinds
+  - id: piccolo
+    name: Piccolo
+    family: woodwind
+    clef: treble
+    keys: [C, Db]
+    aliases: [piccolo, piccolo flute, pikolo, pikolo flauta, ottavino, flauto piccolo, mala flauta,
+              kleine flöte, pickelflöte, kleine fluit, petite flûte]
+    exact: [flautín]
+    abbrevs: [picc., pic., picc, pikc.]
+
+  - id: flute
+    name: Flute
+    family: woodwind
+    clef: treble
+    keys: [C]
+    aliases: [flute, flutes, flûte, flauta, flaute, flauto, flöte, querflöte, fluit, dwarsfluit]
+    abbrevs: [fl., flt., fls.]
+
+  - id: alto_flute
+    name: Alto Flute
+    family: woodwind
+    clef: treble
+    keys: [G]
+    # The alto flute is in G: "Flûte en sol" (French), "Flauta en Sol" (Spanish).
+    aliases: [alto flute, alt flauta, altflöte, altfluit, flauto contralto, flûte alto,
+              flûte en sol, flauta alto, flauta en sol]
+    abbrevs: [a. fl., afl., fl. c.]
+
+  - id: bass_flute
+    name: Bass Flute
+    family: woodwind
+    clef: treble
+    keys: [C]
+    aliases: [bass flute, bas flauta, bassflöte, basfluit, flauto basso, flûte basse, flauta baja]
+    abbrevs: [b. fl.]
+
+  - id: oboe
+    name: Oboe
+    family: woodwind
+    clef: treble
+    keys: [C]
+    aliases: [oboe, oboes, oboa, hobo, hautbois]
+    exact: [hoboe]
+    abbrevs: [ob., obs.]
+
+  - id: english_horn
+    name: English Horn
+    family: woodwind
+    clef: treble
+    keys: [F]
+    aliases: [english horn, cor anglais, engleski rog, corno inglese, englisch horn, engelse hoorn,
+              althobo]
+    exact: [corno inglés]
+    abbrevs: [e.h., eng. hn., e. hn., c.a.]
+
+  # The small clarinet in Eb is often named only by its size: "Mali
+  # klarinet", "Kleine Klarinette", "Petite clarinette", Spanish "Requinto".
+  # Those names give the key Eb (implied_keys), unless a key is printed.
+  - id: clarinet
+    name: Clarinet
+    family: woodwind
+    clef: treble
+    keys: [Bb, A, Eb, C]
+    aliases: [clarinet, clarinets, klarinet, klarineti, clarinetto, klarinette, clarinette,
+              clarinete, mali klarinet, kleine klarinet, kleine klarinette, petite clarinette,
+              clarinetto piccolo]
+    exact: [requinto]
+    abbrevs: [cl., cls., clar., kl., picc. cl.]
+    implied_keys:
+      Eb: [mali klarinet, kleine klarinet, kleine klarinette, petite clarinette,
+           clarinetto piccolo, requinto, picc. cl.]
+
+  - id: alto_clarinet
+    name: Alto Clarinet
+    family: woodwind
+    clef: treble
+    keys: [Eb]
+    # Careful: Italian "clarinetto contralto" is this one, not the contra-alto.
+    aliases: [alto clarinet, alt klarinet, altklarinet, altklarinette, clarinetto contralto,
+              clarinette alto, clarinete alto]
+    exact: [alto cl., alto cl]
+    abbrevs: [a. cl.]
+
+  - id: bass_clarinet
+    name: Bass Clarinet
+    family: woodwind
+    clef: treble
+    # Almost always in Bb; A and C exist but are rare. There is no Eb bass
+    # clarinet, so "Bass Clarinet in Eb" is a misreading (Funk Attack).
+    keys: [Bb, A, C]
+    aliases: [bass clarinet, bas klarinet, basklarinet, clarinetto basso, bassklarinette,
+              clarinette basse, clarinete bajo]
+    exact: [bass cl., bass cl]
+    abbrevs: [b. cl., bcl., cl. b.]
+
+  - id: contra_alto_clarinet
+    name: Contra-alto Clarinet
+    family: woodwind
+    clef: treble
+    keys: [Eb]
+    aliases: [contra-alto clarinet, contra alto clarinet, kontraalt klarinet, contra-altklarinet,
+              kontra-altklarinette, clarinette contre-alto, clarinete contra-alto]
+    abbrevs: [c. a. cl., contra-alt. cl.]
+
+  # Usually in Bb. Eb too, because the Eb contra-alto clarinet is often
+  # printed as a contrabass clarinet ("EEb Contrabass Clarinet", Italian
+  # "Clarinetto contrabbasso in Mi♭"): the instrument is what the PDF says.
+  - id: contrabass_clarinet
+    name: Contrabass Clarinet
+    family: woodwind
+    clef: treble
+    keys: [Bb, Eb]
+    aliases: [contrabass clarinet, kontrabas klarinet, contrabasklarinet, clarinetto contrabbasso,
+              kontrabassklarinette, clarinette contrebasse, clarinete contrabajo]
+    abbrevs: [cb. cl., c. b. cl.]
+
+  - id: bassoon
+    name: Bassoon
+    family: woodwind
+    clef: bass
+    keys: [C]
+    aliases: [bassoon, bassoons, fagot, fagott, fagotto, fagoti, basson]
+    abbrevs: [bsn., bn., fg., fag.]
+
+  - id: contrabassoon
+    name: Contrabassoon
+    family: woodwind
+    clef: bass
+    keys: [C]
+    aliases: [contrabassoon, contra bassoon, double bassoon, kontrafagot, kontrafagott,
+              contrafagot, contrafagotto, contrebasson]
+    abbrevs: [cbsn., cbn., kfg., c. fg.]
+
+  # In Italian, French and Spanish the range word comes AFTER the
+  # instrument ("Saxophone alto"), so those names are listed here in full;
+  # otherwise the generic "Saxophone" below would win.
+  - id: soprano_saxophone
+    name: Soprano Saxophone
+    family: woodwind
+    clef: treble
+    keys: [Bb]
+    # A plain "Soprano" in band parts is the soprano saxophone; a singer is
+    # only meant when the name says so ("Soprano Voice", see voices below).
+    aliases: [soprano saxophone, soprano saxophones, soprano sax, sopran saksofon, sopran saxofon,
+              sopransaxophon, sopraansaxofoon, sopraan saxofoon, sassofono soprano, saxophone soprano,
+              saxofón soprano, soprano, sopran]
+    abbrevs: [s. sax., sop. sax.]
+
+  - id: alto_saxophone
+    name: Alto Saxophone
+    family: woodwind
+    clef: treble
+    keys: [Eb]
+    # A plain "Alto" / "1. alt" in band parts is the alto saxophone; a singer
+    # is only meant when the name says so ("Alto Voice").
+    aliases: [alto saxophone, alto saxophones, alto sax, alt saksofon, alt saxofon, altsaksofon,
+              altsaxophon, altsaxofoon, alt saxofoon, saxofono contralto, sassofono contralto, saxophone alto,
+              saxofón alto, alto, alt]
+    abbrevs: [a. sax., asax., alt. sax.]
+
+  - id: tenor_saxophone
+    name: Tenor Saxophone
+    family: woodwind
+    clef: treble
+    keys: [Bb]
+    aliases: [tenor saxophone, tenor saxophones, tenor sax, tenor saksofon, tenor saxofon,
+              tenorsaksofon, tenorsaxophon, tenorsaxofoon, tenor saxofoon, sassofono tenore, saxophone ténor,
+              saxofón tenor]
+    abbrevs: [t. sax., tsax., ten. sax.]
+
+  - id: baritone_saxophone
+    name: Baritone Saxophone
+    family: woodwind
+    clef: treble
+    keys: [Eb]
+    aliases: [baritone saxophone, baritone saxophones, baritone sax, bari sax, bariton saksofon,
+              bariton saxofon, baritonsaxophon, baritonsaxofoon, bariton saxofoon, sassofono baritono,
+              saxophone baryton, saxofón barítono]
+    exact: [bari. sax.]
+    abbrevs: [bar. sax., b. sax., bsax.]
+
+  - id: bass_saxophone
+    name: Bass Saxophone
+    family: woodwind
+    clef: treble
+    keys: [Bb]
+    aliases: [bass saxophone, bas saksofon, bas saxofon, basssaxophon, bassaxofoon, bas saxofoon,
+              sassofono basso, saxophone basse, saxofón bajo]
+    abbrevs: [bs. sax.]
+
+  # Generic: "Saxophone 1" doesn't say alto, tenor or baritone.
+  - id: saxophone
+    name: Saxophone
+    family: woodwind
+    clef: treble
+    generic: true
+    aliases: [saxophone, saxophones, saksofon, saxofon, saxofoon, sassofono]
+    abbrevs: [sax.]
+
+  # ------------------------------------------------------------------- brass
+  - id: horn
+    name: Horn
+    family: brass
+    clef: treble
+    keys: [F, Eb]
+    # "rog" is Croatian for horn, "horna" is also common. Spanish "trompa" is
+    # the horn (the trumpet is "trompeta", Italian "tromba").
+    aliases: [horn, horns, french horn, rog, rogovi, horna, corno, corno francés, waldhorn,
+              franse hoorn, woudhoorn, trompa]
+    exact: [hoorn]
+    abbrevs: [hn., hns., hrn., cor.]
+
+  - id: cornet
+    name: Cornet
+    family: brass
+    clef: treble
+    keys: [Bb, Eb]
+    # "Soprano Cornet" (brass band, usually in Eb) is a cornet; the longer
+    # alias beats the plain "soprano" of the soprano saxophone.
+    aliases: [cornet, cornets, kornet, kornett, cornet à pistons, soprano cornet]
+    exact: [cornetta, corneta]
+    abbrevs: [cnt., crt., crn.]
+
+  - id: trumpet
+    name: Trumpet
+    family: brass
+    clef: treble
+    keys: [Bb, C, Eb, D]
+    # Croatian "truba"/"trube" only exactly: fuzzily, the island in the
+    # movement title "I. Aruba" read as the trumpet (Antilliaanse Suite).
+    aliases: [trumpet, trumpets, tromba, trompete, trompette, trompet, trompeta]
+    exact: [truba, trube]
+    abbrevs: [tpt., tpts., trp.]
+
+  - id: flugelhorn
+    name: Flugelhorn
+    family: brass
+    clef: treble
+    # Eb: the small "Eb Bugel" of Dutch fanfares (superstar; the user's
+    # decision, 2026-11-12). Bb stays the default.
+    keys: [Bb, Eb]
+    aliases: [flugelhorn, flügelhorn, flugel horn, flugel horns, flügel horn, krilnica, krilnice,
+              fligelhorna, flighorna, bugle,
+              flicorno soprano, fliscorno]
+    # "Flügel I" (cornfield, a Dutch edition) is the flugelhorn. (In German
+    # "Flügel" alone is also the grand piano, but band parts call the piano
+    # "Klavier" or "Piano".) Exact only: "flugel" is 80% like "fuel" and
+    # "luge". OCR's misreadings of the "ü" ("Fligel") are found anyway, see
+    # UMLAUT_MISREADINGS in instruments.py.
+    exact: [bugel, flügel]
+    abbrevs: [flgh., flug., flg.]
+
+  - id: trombone
+    name: Trombone
+    family: brass
+    keys: [C, Bb]
+    treble_clef_key: Bb
+    aliases: [trombone, trombones, trombon, tromboni, posaune, pozauna, tenorposaune, tenortrombone]
+    abbrevs: [tbn., tbns., trb., tromb., pos.]
+
+  - id: bass_trombone
+    name: Bass Trombone
+    family: brass
+    clef: bass
+    keys: [C, Bb]
+    aliases: [bass trombone, bas trombon, bassposaune, bastrombone, trombone basso, trombone basse,
+              trombón bajo]
+    abbrevs: [b. tbn., btbn., b. pos.]
+
+  - id: euphonium
+    name: Euphonium
+    family: brass
+    keys: [C, Bb]
+    treble_clef_key: Bb
+    # "Tenor tuba" is another name for the euphonium. The longer alias wins,
+    # so it never becomes the voice "tenor_voice" or a plain "tuba".
+    aliases: [euphonium, euphoniums, eufonij, eufonijum, eufonium, eufonio, tenor tuba, tenortuba,
+              flicorno baritono]
+    exact: [bombardino]
+    abbrevs: [euph., euph]
+
+  - id: baritone
+    name: Baritone
+    family: brass
+    keys: [C, Bb]
+    treble_clef_key: Bb
+    # Baritone horn (brass). "Baritone Saxophone" has its own longer alias
+    # above, and the longer match always wins.
+    aliases: [baritone, baritone horn, bariton, baryton, bariton rog]
+    abbrevs: [bar., bari.]
+
+  # Tenor horn: in Central European bands a Bb instrument like a small
+  # euphonium, written in treble clef; a plain "Tenor" in a band part means
+  # this one (a singer only when the name says "Tenor Voice"). The British
+  # brass-band tenor horn is in Eb: a printed "Tenor Horn in Eb" keeps it.
+  # "Tenor Saxophone" and "Tenor Tuba" (= euphonium) have longer aliases
+  # elsewhere, and the longer match always wins.
+  - id: tenor_horn
+    name: Tenor Horn
+    family: brass
+    clef: treble
+    keys: [Bb, C, Eb]
+    aliases: [tenor horn, tenor horns, tenorhorn, tenorhorna, tenorhoorn, tenor, tenore]
+    abbrevs: [t. hn., ten. hn.]
+
+  # Alto horn: the Eb horn of brass bands and Dutch fanfares ("Alto Horn" in
+  # the US, "Althorn" in German, "Flicorno contralto" in Italian, "Cor alto"
+  # in French; British bands call it the tenor horn). Usually in Eb, some in
+  # F. A plain "Alt"/"Alto" is still the alto saxophone.
+  - id: alto_horn
+    name: Alto Horn
+    family: brass
+    clef: treble
+    keys: [Eb, F]
+    aliases: [alto horn, alto horns, althorn, flicorno contralto, cor alto, bugle alto, trompa alto]
+    exact: [althoorn, alcorno]
+    abbrevs: [a. hn.]
+
+  # ONE tuba for "Tuba" and "Bass Tuba". A plain "Bass" (even "Bass in Bb")
+  # is the generic `bass` below: the instrument is what the PDF says.
+  - id: tuba
+    name: Tuba
+    family: brass
+    keys: [C, Bb, Eb, F]
+    aliases: [tuba, tubas, bass tuba, bas tuba, basstuba, basso tuba, kontrabasstuba,
+              flicorno basso, contrebasse à vent]
+    exact: [bastuba]
+    abbrevs: [tba., tb., b. tba., b. tb.]
+
+  - id: sousaphone
+    name: Sousaphone
+    family: brass
+    keys: [C, Bb, Eb]
+    aliases: [sousaphone, suzafon, sousafoon, sousafón, soubassophone]
+    abbrevs: [sous.]
+
+  # -------------------------------------------------------------- percussion
+  # Careful: French and Spanish "timbales" are the timpani in orchestral
+  # music, but this file reads "timbales" as the Latin drums (see timbales).
+  - id: timpani
+    name: Timpani
+    family: percussion
+    clef: bass
+    aliases: [timpani, timpano, timpan, pauken, kettledrums, kotlovi]
+    abbrevs: [timp., timp, tmp., pk.]
+
+  # German "Schlagzeug" and French "batterie" can also mean the whole
+  # percussion section; in band parts they are usually the drum kit.
+  - id: drum_set
+    name: Drum Set
+    family: percussion
+    aliases: [drum set, drumset, drum kit, drums, drum-set, drumstel, bubnjevi, bubanj,
+              set bubnjeva, batterie, schlagzeug]
+    exact: [batteria, batería]
+    abbrevs: [dr., drs., d.s., dr. set]
+
+  # Generic: "Percussion 2" doesn't say which instruments the player has.
+  - id: percussion
+    name: Percussion
+    family: percussion
+    generic: true
+    aliases: [percussion, percussions, percussione, percussie, udaraljke, perkusije, schlagwerk,
+              slagwerk]
+    exact: [percusión]
+    abbrevs: [perc., perc, prc.]
+
+  - id: snare_drum
+    name: Snare Drum
+    family: percussion
+    # "Cassa chiara" and "tamburo militare" are the Italian names, "kleine
+    # Trommel" the German one (old march editions often use them).
+    aliases: [snare drum, snare, snaredrum, mali bubanj, mali doboš, cassa chiara, tamburo militare,
+              kleine trommel, kleine trom, caisse claire, caja, caja clara, redoblante]
+    abbrevs: [s.d., sn. dr.]
+
+  # The longer alias keeps "Tenor Drum" away from the plain "tenor" (the
+  # tenor horn).
+  - id: tenor_drum
+    name: Tenor Drum
+    family: percussion
+    aliases: [tenor drum, tenor drums]
+    abbrevs: []
+
+  - id: bass_drum
+    name: Bass Drum
+    family: percussion
+    # "Cassa" / "Gran cassa" is the Italian name of the big bass drum, used
+    # in old marches (e.g. Gardijska). German: "große Trommel".
+    aliases: [bass drum, veliki bubanj, veliki doboš, cassa, gran cassa, grancassa, große trommel,
+              grote trom, grosse caisse]
+    exact: [bombo]
+    abbrevs: [b.d., b. dr., g.c., gr. c.]
+
+  - id: cymbals
+    name: Cymbals
+    family: percussion
+    aliases: [cymbals, cymbal, crash cymbals, susp. cymbal, suspended cymbal, činele, cymbales,
+              platillos]
+    exact: [becken, bekken, bekkens, piatti]
+    abbrevs: [cym., cymb., cyms.]
+
+  # Crotales ("antique cymbals"): small tuned discs. The longer names
+  # ("cymbales antiques") win over the plain cymbals.
+  - id: crotales
+    name: Crotales
+    family: percussion
+    aliases: [crotales, crotali, krotali, crótalos, antique cymbals, cymbales antiques,
+              antičke činele, antički čineli, antieke bekkens, zimbeln]
+    abbrevs: [crot.]
+
+  # Generic, like Percussion: "Mallets" is often several instruments on one
+  # sheet (xylophone, glockenspiel, vibraphone ...). "Mallets/Xylophone" is
+  # the xylophone (see `generic:` above).
+  - id: mallets
+    name: Mallets
+    family: percussion
+    generic: true
+    aliases: [mallets, mallet percussion, keyboard percussion]
+    abbrevs: [mall., mlt., mld.]
+
+  - id: xylophone
+    name: Xylophone
+    family: percussion
+    clef: treble
+    aliases: [xylophone, ksilofon, xylofon, xylophon, xylofoon, xilofono, silofono]
+    abbrevs: [xyl., xylo.]
+
+  - id: vibraphone
+    name: Vibraphone
+    family: percussion
+    clef: treble
+    aliases: [vibraphone, vibrafon, vibraphon, vibrafoon, vibrafono, vibes]
+    abbrevs: [vib., vibr.]
+
+  - id: glockenspiel
+    name: Glockenspiel
+    family: percussion
+    clef: treble
+    aliases: [glockenspiel, bells, orchestra bells, zvončići, klokkenspel, campanelli,
+              jeu de timbres, juego de campanas]
+    abbrevs: [glock., glk., glsp.]
+
+  - id: marimba
+    name: Marimba
+    family: percussion
+    aliases: [marimba, marimbafon, marimbaphon]
+    abbrevs: [mar., mrb., mba.]
+
+  - id: chimes
+    name: Chimes
+    family: percussion
+    aliases: [chimes, tubular bells, wind chimes, zvona, cjevasta zvona, cevasta zvona,
+              röhrenglocken, buisklokken, campane tubolari, cloches tubulaires, campanas tubulares]
+    exact: [tub. bells, tub bells]
+    abbrevs: [chim., t. bells]
+
+  - id: tambourine
+    name: Tambourine
+    family: percussion
+    aliases: [tambourine, tamburin]
+    abbrevs: [tamb., tamb]
+
+  - id: tam_tam
+    name: Tam-tam
+    family: percussion
+    aliases: [tam-tam, tamtam, tam tam, gong]
+    abbrevs: [t.t.]
+
+  - id: shaker
+    name: Shaker
+    family: percussion
+    aliases: [shaker, shakers]
+    exact: [šejker]
+    abbrevs: []
+
+  - id: cowbell
+    name: Cowbell
+    family: percussion
+    # Only exactly: fuzzily "cowbell" also finds names like "McDowell" and
+    # "Cromwell", and Dutch "koebel" is one OCR slip from ordinary words.
+    aliases: [campanaccio, kuhglocke, cencerro, cloche à vache, kravlje zvono]
+    exact: [cowbell, cowbells, cow bell, koebel]
+    abbrevs: []
+
+  - id: triangle
+    name: Triangle
+    family: percussion
+    aliases: [triangle, triangl, trokut, triangolo]
+    exact: [triangel, triángulo]
+    abbrevs: [tri., trgl.]
+
+  - id: congas
+    name: Congas
+    family: percussion
+    aliases: [congas, conga, bongos, bongo]
+    abbrevs: []
+
+  # The Latin timbales (two shallow metal drums, Cuban "pailas"). Careful:
+  # in French and Spanish orchestral music "timbales" means the timpani; this
+  # entry reads the word as the Latin drums (Deep Purple p89-90, "TIMBALES"
+  # and "TIMB.").
+  - id: timbales
+    name: Timbales
+    family: percussion
+    aliases: [timbales, timbale, timbal, timbaleta, timbalitos, timbalesi, pailas, paila,
+              pailas criollas, pailitas, timbales latines, timbales latini, timbales créoles,
+              mini timbales]
+    abbrevs: [timb., timbs.]
+
+  # ---------------------------------------------------------------- keyboard
+  - id: piano
+    name: Piano
+    family: keyboard
+    aliases: [piano, klavir, glasovir, pianoforte, klavier]
+    abbrevs: [pno., pf., pno]
+
+  # French "clavier" is the keyboard (German "Klavier" is the piano).
+  - id: keyboard
+    name: Keyboard
+    family: keyboard
+    aliases: [keyboard, keyboards, synthesizer, synth, klavijature, sintesajzer, sintisajzer,
+              sintetizzatore, synthétiseur, sintetizador, teclado, toetsen]
+    exact: [tastiera, clavier]
+    abbrevs: [kbd., kbd, syn.]
+
+  # Only exact: "Celeste" (a word in song titles) would otherwise be read as
+  # the celesta. "Čelesta" and "Célesta" match too (accents don't matter).
+  - id: celesta
+    name: Celesta
+    family: keyboard
+    aliases: []
+    exact: [celesta]
+    abbrevs: [cel.]
+
+  - id: organ
+    name: Organ
+    family: keyboard
+    aliases: [organ, orgulje, organo, orgel]
+    exact: [orgue]
+    abbrevs: [org.]
+
+  - id: harp
+    name: Harp
+    family: strings
+    aliases: [harp, harfa, arpa, harfe]
+    exact: [harpe]
+    abbrevs: [hp., hrp.]
+
+  # ----------------------------------------------------------------- strings
+  - id: guitar
+    name: Guitar
+    family: strings
+    clef: treble
+    aliases: [guitar, gitara, acoustic guitar, akustična gitara, chitarra, gitarre, guitare,
+              guitarra, gitaar]
+    abbrevs: [gtr., gt., guit.]
+
+  - id: electric_guitar
+    name: Electric Guitar
+    family: strings
+    clef: treble
+    aliases: [electric guitar, električna gitara, e-guitar, e-gitarre, elektrische gitaar,
+              chitarra elettrica, guitare électrique, guitarra eléctrica]
+    abbrevs: [e. gtr., el. gtr., el. guit.]
+
+  - id: bass_guitar
+    name: Bass Guitar
+    family: strings
+    clef: bass
+    aliases: [bass guitar, electric bass, bas gitara, bas-gitara, bass-gitara, e-bass,
+              basovska gitara, električni bas, elektrische bas, basgitaar, basso elettrico,
+              basse électrique, bajo eléctrico]
+    exact: [bass gtr., bass gtr, el. bass, el bass]
+    abbrevs: [b. gtr., bs. gtr., e. bass]
+
+  - id: violin
+    name: Violin
+    family: strings
+    clef: treble
+    aliases: [violin, violins, violina, violine, violinen, violino, violini, geige, viool, violon,
+              violons, violín, violines]
+    exact: [violen]
+    abbrevs: [vln., vl., vn., vlns.]
+
+  # French "alto" is the viola, but in band parts a plain "Alto" is the alto
+  # saxophone, so it isn't listed here.
+  - id: viola
+    name: Viola
+    family: strings
+    aliases: [viola, violas, viole, bratsche, bratschen, altviool]
+    abbrevs: [vla., vlas., va.]
+
+  - id: cello
+    name: Cello
+    family: strings
+    clef: bass
+    aliases: [cello, cellos, violoncello, violončelo, čelo, violoncel, violoncelle, violonchelo]
+    exact: [chelo]
+    abbrevs: [vc., vcl., vcs.]
+
+  - id: double_bass
+    name: Double Bass
+    family: strings
+    clef: bass
+    aliases: [double bass, contrabass, string bass, kontrabas, contrabbasso, kontrabass,
+              contrebasse, contrabajo, upright bass, strijkbas, contrebasse à cordes]
+    exact: [contrabas]
+    abbrevs: [cb., db., kb., d.b.]
+
+  # ------------------------------------------------------------------- voice
+  # Voice ids end in "_voice", so `alto_voice` can't be mixed up with
+  # `alto_saxophone` (the display names stay "Soprano", "Alto" ...).
+  # A singer is only meant when the name SAYS so ("Soprano Voice", "Alto
+  # Vocals", "Tenor glas"): in band parts a plain "Soprano" / "Alto" is the
+  # saxophone and a plain "Tenor" the tenor horn. "Contralto" and
+  # "Mezzosoprano" are only ever voices, so they stay.
+  - id: soprano_voice
+    name: Soprano
+    family: voice
+    aliases: [soprano voice, soprano vocals, soprano vocal, sopran glas]
+    abbrevs: []
+
+  - id: mezzo_voice
+    name: Mezzo-soprano
+    family: voice
+    aliases: [mezzo-soprano, mezzo soprano, mezzosoprano, mezzosopran, mezzosopraan, mecosopran]
+    abbrevs: [mez.]
+
+  - id: alto_voice
+    name: Alto
+    family: voice
+    aliases: [alto voice, alto vocals, alto vocal, alt glas, contralto, voix d'alto]
+    abbrevs: []
+
+  - id: tenor_voice
+    name: Tenor
+    family: voice
+    aliases: [tenor voice, tenor vocals, tenor vocal, tenor glas]
+    abbrevs: []
+
+  # The bass VOICE only when the name says so; a plain "Bass" is the
+  # generic `bass` below (it could be a singer, a bass guitar or a tuba).
+  - id: bass_voice
+    name: Bass
+    family: voice
+    aliases: [bass voice, bass vocals, bas glas]
+    abbrevs: []
+
+  # Generic: "Voice" / "Vocals" doesn't say soprano, alto, tenor or bass.
+  - id: voice
+    name: Voice
+    family: voice
+    generic: true
+    aliases: [voice, vocals, vocal, glas, vokal, choir, zbor]
+    abbrevs: [vox, vo.]
+
+  # ------------------------------------------------------------------- other
+  # Generic: a plain "Bass" could be a bass guitar, a double bass, a singer
+  # or a band tuba. Longer names ("Bass Clarinet", "Bass Guitar", "Bass
+  # Drum", "Bass Voice") have their own entries and win over this one.
+  # A printed key is kept ("Eb Bass" = bass in Eb): the instrument is what
+  # the PDF says, a person can change it. A band bass is written in the same
+  # keys as the tuba. Being generic, a "Bass" with no key printed gets no
+  # key (it may be a bass guitar), only a note to check.
+  - id: bass
+    name: Bass
+    family: other
+    generic: true
+    keys: [C, Bb, Eb, F]
+    aliases: [bass, bas, basso]
+    exact: [basse, bajo]
+    abbrevs: []
+
+# -----------------------------------------------------------------------------
+# Words that mark a CONDUCTOR SCORE when they appear in the page header.
+# Lowercase. Matched as whole words.
+# -----------------------------------------------------------------------------
+score_keywords:
+  - score
+  - full score
+  - conductor
+  - conductor score
+  - condensed score
+  - partitura
+  - partitur
+  - dirigent
+  - direktion
+  - dirigentska partitura
+  - directie
+  - conducteur
+
+# -----------------------------------------------------------------------------
+# Small words that can follow a part name and carry the part NUMBER.
+# "Solo" is treated like a number ("Clarinet Solo").
+# -----------------------------------------------------------------------------
+number_words: [solo, tutti, div., div, principal, ripieno]
+
+# -----------------------------------------------------------------------------
+# Ordinal words that give the part NUMBER, before or after the name:
+# "Primo Clarinetto", "Corno secondo", "Premier Cornet", "Eerste Trompet".
+# Accents don't matter ("deuxième" = "deuxieme"). Written with digits
+# ("1st", "1er", "2e", "2de", "1º") they are read by the code instead.
+# -----------------------------------------------------------------------------
+ordinal_words:
+  1: [first, primo, prima, premier, première, primero, primera, erste, erster, eerste, prvi, prva]
+  2: [second, secondo, seconda, seconde, deuxième, segundo, segunda, zweite, zweiter, tweede,
+      drugi, druga]
+  3: [third, terzo, terza, troisième, tercero, tercera, dritte, dritter, derde, treći, treća]
+  4: [fourth, quarto, quarta, quatrième, cuarto, cuarta, vierte, vierter, vierde, četvrti, četvrta]

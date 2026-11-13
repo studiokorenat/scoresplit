@@ -1,0 +1,29 @@
+{
+  "title": "Gershwin In Concert",
+  "composer": "George Gershwin",
+  "arranger": "Marty Gold",
+  "parts": [
+    {"name": "Conductor Score", "instrument": "score", "number": null, "key": null, "clef": null, "pages": "2-23", "export": true},
+    {"name": "Flute", "instrument": "flute", "number": null, "key": "C", "clef": "treble", "pages": "24-26", "export": true},
+    {"name": "Oboe", "instrument": "oboe", "number": null, "key": "C", "clef": "treble", "pages": "27-29", "export": true},
+    {"name": "Bassoon", "instrument": "bassoon", "number": null, "key": "C", "clef": "bass", "pages": "30-32", "export": true},
+    {"name": "Bb Clarinet 1", "instrument": "clarinet", "number": "1", "key": "Bb", "clef": "treble", "pages": "33-35", "export": true},
+    {"name": "Bb Clarinet 2&3", "instrument": "clarinet", "number": "2&3", "key": "Bb", "clef": "treble", "pages": "36-38", "export": true},
+    {"name": "Bb Bass Clarinet", "instrument": "bass_clarinet", "number": null, "key": "Bb", "clef": "treble", "pages": "39-41", "export": true},
+    {"name": "Eb Alto Sax. 1&2", "instrument": "alto_saxophone", "number": "1&2", "key": "Eb", "clef": "treble", "pages": "42-44", "export": true},
+    {"name": "Bb Tenor Sax.", "instrument": "tenor_saxophone", "number": null, "key": "Bb", "clef": "treble", "pages": "45-47", "export": true},
+    {"name": "Eb Baritone Sax.", "instrument": "baritone_saxophone", "number": null, "key": "Eb", "clef": "treble", "pages": "48-49", "export": true},
+    {"name": "Bb Trumpet 1", "instrument": "trumpet", "number": "1", "key": "Bb", "clef": "treble", "pages": "50-51", "export": true},
+    {"name": "Bb Trumpet 2&3", "instrument": "trumpet", "number": "2&3", "key": "Bb", "clef": "treble", "pages": "52-54", "export": true},
+    {"name": "F Horn 1&2", "instrument": "horn", "number": "1&2", "key": "F", "clef": "treble", "pages": "55-57", "export": true},
+    {"name": "Trombone 1", "instrument": "trombone", "number": "1", "key": "C", "clef": "bass", "pages": "58-60", "export": true},
+    {"name": "Trombone 2&3", "instrument": "trombone", "number": "2&3", "key": "C", "clef": "bass", "pages": "61-63", "export": true},
+    {"name": "Baritone", "instrument": "baritone", "number": null, "key": "C", "clef": "bass", "pages": "64-66", "export": true},
+    {"name": "Basses", "instrument": "bass", "number": null, "key": "C", "clef": "bass", "pages": "67-68", "export": true},
+    {"name": "Percussion 1 Timpani Bells Vibraphone", "instrument": "percussion", "number": "1", "key": null, "clef": null, "pages": "69-70", "export": true},
+    {"name": "Percussion 2 Cymbals Drum Set", "instrument": "percussion", "number": "2", "key": null, "clef": null, "pages": "71-73", "export": true}
+  ],
+  "extra": [
+    {"reason": "cover", "pages": "1"}
+  ]
+}

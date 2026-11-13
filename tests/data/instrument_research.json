@@ -1,0 +1,702 @@
+{
+  "wind": [
+    {
+      "name": "Piccolo",
+      "keys": ["C", "D♭"],
+      "abbreviations": ["Picc."],
+      "languages": {
+        "croatian": "Pikolo / Mala flauta",
+        "serbian_latin": "Pikolo / Mala flauta",
+        "serbian_cyrillic": "Пиколо / Мала флаута",
+        "dutch": "Piccolo / Kleine fluit",
+        "italian": "Ottavino / Flauto piccolo",
+        "german": "Kleine Flöte / Pickelflöte",
+        "french": "Petite flûte",
+        "spanish": "Flautín"
+      }
+    },
+    {
+      "name": "Flute",
+      "keys": ["C"],
+      "abbreviations": ["Fl."],
+      "languages": {
+        "croatian": "Flauta",
+        "serbian_latin": "Flauta",
+        "serbian_cyrillic": "Флаута",
+        "dutch": "Dwarsfluit / Fluit",
+        "italian": "Flauto",
+        "german": "Flöte / Querflöte",
+        "french": "Flûte",
+        "spanish": "Flauta"
+      }
+    },
+    {
+      "name": "Alto Flute",
+      "keys": ["G"],
+      "abbreviations": ["A. Fl.", "Fl. c."],
+      "languages": {
+        "croatian": "Alt flauta",
+        "serbian_latin": "Alt flauta",
+        "serbian_cyrillic": "Алт флаута",
+        "dutch": "Altfluit",
+        "italian": "Flauto contralto",
+        "german": "Altflöte",
+        "french": "Flûte alto / Flûte en sol",
+        "spanish": "Flauta alto / Flauta en Sol"
+      }
+    },
+    {
+      "name": "Bass Flute",
+      "keys": ["C"],
+      "abbreviations": ["B. Fl."],
+      "languages": {
+        "croatian": "Bas flauta",
+        "serbian_latin": "Bas flauta",
+        "serbian_cyrillic": "Бас флаута",
+        "dutch": "Basfluit",
+        "italian": "Flauto basso",
+        "german": "Bassflöte",
+        "french": "Flûte basse",
+        "spanish": "Flauta baja"
+      }
+    },
+    {
+      "name": "Oboe",
+      "keys": ["C"],
+      "abbreviations": ["Ob."],
+      "languages": {
+        "croatian": "Oboa",
+        "serbian_latin": "Oboa",
+        "serbian_cyrillic": "Обоа",
+        "dutch": "Hobo",
+        "italian": "Oboe",
+        "german": "Oboe / Hoboe",
+        "french": "Hautbois",
+        "spanish": "Oboe"
+      }
+    },
+    {
+      "name": "English Horn",
+      "keys": ["F"],
+      "abbreviations": ["E. Hn.", "C. A."],
+      "languages": {
+        "croatian": "Engleski rog",
+        "serbian_latin": "Engleski rog",
+        "serbian_cyrillic": "Енглески рог",
+        "dutch": "Althobo / Engelse hoorn",
+        "italian": "Corno inglese",
+        "german": "Englisch Horn",
+        "french": "Cor anglais",
+        "spanish": "Corno inglés"
+      }
+    },
+    {
+      "name": "Bassoon",
+      "keys": ["C"],
+      "abbreviations": ["Bsn.", "Fg."],
+      "languages": {
+        "croatian": "Fagot",
+        "serbian_latin": "Fagot",
+        "serbian_cyrillic": "Фагот",
+        "dutch": "Fagot",
+        "italian": "Fagotto",
+        "german": "Fagott",
+        "french": "Basson",
+        "spanish": "Fagot"
+      }
+    },
+    {
+      "name": "Contrabassoon",
+      "keys": ["C"],
+      "abbreviations": ["Cbsn.", "C. Fg."],
+      "languages": {
+        "croatian": "Kontrafagot",
+        "serbian_latin": "Kontrafagot",
+        "serbian_cyrillic": "Контрафагот",
+        "dutch": "Contrafagot",
+        "italian": "Contrafagotto",
+        "german": "Kontrafagott",
+        "french": "Contrebasson",
+        "spanish": "Contrafagot"
+      }
+    },
+    {
+      "name": "E♭ Clarinet",
+      "keys": ["E♭"],
+      "abbreviations": ["E♭ Cl.", "Picc. Cl."],
+      "languages": {
+        "croatian": "Es-klarinet / Mali klarinet",
+        "serbian_latin": "Es-klarinet / Mali klarinet",
+        "serbian_cyrillic": "Ес-кларинет / Мали кларинет",
+        "dutch": "Es-klarinet / Kleine klarinet",
+        "italian": "Clarinetto piccolo in Mi♭",
+        "german": "Kleine Klarinette in Es",
+        "french": "Petite clarinette en Mi♭",
+        "spanish": "Requinto / Clarinete en Mi♭"
+      }
+    },
+    {
+      "name": "B♭ Clarinet",
+      "keys": ["B♭"],
+      "abbreviations": ["B♭ Cl.", "Cl."],
+      "languages": {
+        "croatian": "B-klarinet / Klarinet",
+        "serbian_latin": "Be-klarinet / Klarinet",
+        "serbian_cyrillic": "Бе-кларинет / Кларинет",
+        "dutch": "Bes-klarinet / Klarinet",
+        "italian": "Clarinetto in Si♭",
+        "german": "Klarinette in B",
+        "french": "Clarinette en Si♭",
+        "spanish": "Clarinete en Si♭"
+      }
+    },
+    {
+      "name": "A Clarinet",
+      "keys": ["A"],
+      "abbreviations": ["A Cl.", "Cl. in A"],
+      "languages": {
+        "croatian": "A-klarinet",
+        "serbian_latin": "A-klarinet",
+        "serbian_cyrillic": "А-кларинет",
+        "dutch": "A-klarinet",
+        "italian": "Clarinetto in La",
+        "german": "Klarinette in A",
+        "french": "Clarinette en La",
+        "spanish": "Clarinete en La"
+      }
+    },
+    {
+      "name": "Alto Clarinet",
+      "keys": ["E♭"],
+      "abbreviations": ["A. Cl."],
+      "languages": {
+        "croatian": "Alt klarinet",
+        "serbian_latin": "Alt klarinet",
+        "serbian_cyrillic": "Алт кларинет",
+        "dutch": "Altklarinet",
+        "italian": "Clarinetto contralto",
+        "german": "Altklarinette",
+        "french": "Clarinette alto",
+        "spanish": "Clarinete alto"
+      }
+    },
+    {
+      "name": "Bass Clarinet",
+      "keys": ["B♭", "C"],
+      "abbreviations": ["B. Cl.", "Cl. B."],
+      "languages": {
+        "croatian": "Bas klarinet",
+        "serbian_latin": "Bas klarinet",
+        "serbian_cyrillic": "Бас кларинет",
+        "dutch": "Basklarinet",
+        "italian": "Clarinetto basso",
+        "german": "Bassklarinette",
+        "french": "Clarinette basse",
+        "spanish": "Clarinete bajo"
+      }
+    },
+    {
+      "name": "Contra-alto Clarinet",
+      "keys": ["E♭"],
+      "abbreviations": ["C. A. Cl.", "Contra-alt. Cl."],
+      "languages": {
+        "croatian": "Kontraalt klarinet",
+        "serbian_latin": "Kontraalt klarinet",
+        "serbian_cyrillic": "Контраалт кларинет",
+        "dutch": "Contra-altklarinet",
+        "italian": "Clarinetto contrabbasso in Mi♭",
+        "german": "Kontra-Altklarinette",
+        "french": "Clarinette contre-alto",
+        "spanish": "Clarinete contra-alto"
+      }
+    },
+    {
+      "name": "Contrabass Clarinet",
+      "keys": ["B♭"],
+      "abbreviations": ["Cb. Cl.", "C. B. Cl."],
+      "languages": {
+        "croatian": "Kontrabas klarinet",
+        "serbian_latin": "Kontrabas klarinet",
+        "serbian_cyrillic": "Контрабас кларинет",
+        "dutch": "Contrabasklarinet",
+        "italian": "Clarinetto contrabbasso",
+        "german": "Kontrabassklarinette",
+        "french": "Clarinette contrebasse",
+        "spanish": "Clarinete contrabajo"
+      }
+    },
+    {
+      "name": "Soprano Saxophone",
+      "keys": ["B♭"],
+      "abbreviations": ["S. Sax.", "Sop. Sax."],
+      "languages": {
+        "croatian": "Sopran saksofon",
+        "serbian_latin": "Sopran saksofon",
+        "serbian_cyrillic": "Сопран саксофон",
+        "dutch": "Sopraansaxofoon",
+        "italian": "Sassofono soprano",
+        "german": "Sopransaxophon",
+        "french": "Saxophone soprano",
+        "spanish": "Saxofón soprano"
+      }
+    },
+    {
+      "name": "Alto Saxophone",
+      "keys": ["E♭"],
+      "abbreviations": ["A. Sax.", "Alt. Sax."],
+      "languages": {
+        "croatian": "Alt saksofon",
+        "serbian_latin": "Alt saksofon",
+        "serbian_cyrillic": "Алт саксофон",
+        "dutch": "Altsaxofoon",
+        "italian": "Sassofono contralto",
+        "german": "Altsaxophon",
+        "french": "Saxophone alto",
+        "spanish": "Saxofón alto"
+      }
+    },
+    {
+      "name": "Tenor Saxophone",
+      "keys": ["B♭"],
+      "abbreviations": ["T. Sax.", "Ten. Sax."],
+      "languages": {
+        "croatian": "Tenor saksofon",
+        "serbian_latin": "Tenor saksofon",
+        "serbian_cyrillic": "Тенор саксофон",
+        "dutch": "Tenorsaxofoon",
+        "italian": "Sassofono tenore",
+        "german": "Tenorsaxophon",
+        "french": "Saxophone ténor",
+        "spanish": "Saxofón tenor"
+      }
+    },
+    {
+      "name": "Baritone Saxophone",
+      "keys": ["E♭"],
+      "abbreviations": ["B. Sax.", "Bari. Sax."],
+      "languages": {
+        "croatian": "Bariton saksofon",
+        "serbian_latin": "Bariton saksofon",
+        "serbian_cyrillic": "Баритон саксофон",
+        "dutch": "Baritonsaxofoon",
+        "italian": "Sassofono baritono",
+        "german": "Baritonsaxophon",
+        "french": "Saxophone baryton",
+        "spanish": "Saxofón barítono"
+      }
+    },
+    {
+      "name": "Bass Saxophone",
+      "keys": ["B♭"],
+      "abbreviations": ["Bs. Sax."],
+      "languages": {
+        "croatian": "Bas saksofon",
+        "serbian_latin": "Bas saksofon",
+        "serbian_cyrillic": "Бас саксофон",
+        "dutch": "Bassaxofoon",
+        "italian": "Sassofono basso",
+        "german": "Basssaxophon",
+        "french": "Saxophone basse",
+        "spanish": "Saxofón bajo"
+      }
+    }
+  ],
+  "brass": [
+    {
+      "name": "Trumpet / Cornet",
+      "keys": ["B♭", "C", "E♭", "D"],
+      "abbreviations": ["Tpt.", "Tr.", "Cnt.", "Crn."],
+      "languages": {
+        "croatian": "Truba / Kornet",
+        "serbian_latin": "Truba / Kornet",
+        "serbian_cyrillic": "Труба / Корнет",
+        "dutch": "Trompet / Cornet",
+        "italian": "Tromba / Cornetta",
+        "german": "Trompete / Kornett",
+        "french": "Trompette / Cornet à pistons",
+        "spanish": "Trompeta / Corneta"
+      }
+    },
+    {
+      "name": "Flugelhorn",
+      "keys": ["B♭"],
+      "abbreviations": ["Flgh.", "Flg."],
+      "languages": {
+        "croatian": "Krilnica / Fligelhorna",
+        "serbian_latin": "Krilnica / Flighorna",
+        "serbian_cyrillic": "Крилница / Флигхорна",
+        "dutch": "Flugelhorn / Bugel",
+        "italian": "Flicorno soprano",
+        "german": "Flügelhorn",
+        "french": "Bugle",
+        "spanish": "Fliscorno"
+      }
+    },
+    {
+      "name": "French Horn",
+      "keys": ["F", "E♭"],
+      "abbreviations": ["Hn.", "Cor."],
+      "languages": {
+        "croatian": "Rog / Horn",
+        "serbian_latin": "Rog / Horna",
+        "serbian_cyrillic": "Рог / Хорна",
+        "dutch": "Hoorn / Franse hoorn / Woudhoorn",
+        "italian": "Corno",
+        "german": "Horn / Waldhorn",
+        "french": "Cor / Cor d'harmonie",
+        "spanish": "Trompa / Corno francés"
+      }
+    },
+    {
+      "name": "Tenor Horn / Alto Horn",
+      "keys": ["E♭"],
+      "abbreviations": ["T. Hn.", "A. Hn."],
+      "languages": {
+        "croatian": "Althorn / Tenorhorn",
+        "serbian_latin": "Althorn / Tenorhorna",
+        "serbian_cyrillic": "Алтхорн / Тенорхорна",
+        "dutch": "Althoorn / Tenorhoorn",
+        "italian": "Flicorno contralto",
+        "german": "Althorn",
+        "french": "Bugle alto / Cor alto",
+        "spanish": "Trompa alto / Alcorno"
+      }
+    },
+    {
+      "name": "Tenor Trombone",
+      "keys": ["C", "B♭"],
+      "abbreviations": ["Tbn.", "Pos."],
+      "languages": {
+        "croatian": "Tenor trombon / Trombon / Pozauna",
+        "serbian_latin": "Tenor trombon / Trombon / Pozauna",
+        "serbian_cyrillic": "Тенор тромбон / Тромбон / Позауна",
+        "dutch": "Tenortrombone / Trombone",
+        "italian": "Trombone (tenore)",
+        "german": "Posaune (Tenorposaune)",
+        "french": "Trombone (ténor)",
+        "spanish": "Trombón (tenor)"
+      }
+    },
+    {
+      "name": "Bass Trombone",
+      "keys": ["C"],
+      "abbreviations": ["B. Tbn.", "B. Pos."],
+      "languages": {
+        "croatian": "Bas trombon",
+        "serbian_latin": "Bas trombon",
+        "serbian_cyrillic": "Бас тромбон",
+        "dutch": "Bastrombone",
+        "italian": "Trombone basso",
+        "german": "Bassposaune",
+        "french": "Trombone basse",
+        "spanish": "Trombón bajo"
+      }
+    },
+    {
+      "name": "Euphonium / Baritone",
+      "keys": ["C", "B♭"],
+      "abbreviations": ["Euph.", "Bar."],
+      "languages": {
+        "croatian": "Eufonij / Bariton",
+        "serbian_latin": "Eufonijum / Bariton",
+        "serbian_cyrillic": "Еуфонијум / Баритон",
+        "dutch": "Euphonium / Bariton",
+        "italian": "Eufonio / Flicorno baritono",
+        "german": "Euphonium / Baryton / Tenorhorn",
+        "french": "Euphonium / Baryton",
+        "spanish": "Bombardino / Barítono"
+      }
+    },
+    {
+      "name": "Tuba / Sousaphone / Basses",
+      "keys": ["C", "B♭", "E♭", "F"],
+      "abbreviations": ["Tba.", "Sous.", "B♭ Bass", "E♭ Bass"],
+      "languages": {
+        "croatian": "Tuba / Suzafon / Bas",
+        "serbian_latin": "Tuba / Suzafon / Bas",
+        "serbian_cyrillic": "Туба / Сузафон / Бас",
+        "dutch": "Tuba / Bastuba / Sousafoon",
+        "italian": "Tuba / Flicorno basso / Basso tuba",
+        "german": "Tuba / Basstuba / Kontrabasstuba",
+        "french": "Tuba / Contrebasse à vent / Soubassophone",
+        "spanish": "Tuba / Sousafón / Bajo"
+      }
+    }
+  ],
+  "percussion": [
+    {
+      "name": "Timpani",
+      "keys": ["C"],
+      "abbreviations": ["Timp.", "Pk."],
+      "languages": {
+        "croatian": "Timpani / Kotlovi",
+        "serbian_latin": "Timpani / Kotlovi",
+        "serbian_cyrillic": "Тимпани / Котлови",
+        "dutch": "Pauken",
+        "italian": "Timpani",
+        "german": "Pauken",
+        "french": "Timbales",
+        "spanish": "Timbales (clásicos)"
+      }
+    },
+    {
+      "name": "Glockenspiel",
+      "keys": ["C"],
+      "abbreviations": ["Glock.", "Glsp."],
+      "languages": {
+        "croatian": "Zvončići",
+        "serbian_latin": "Zvončići",
+        "serbian_cyrillic": "Звончићи",
+        "dutch": "Klokkenspel / Glockenspiel",
+        "italian": "Campanelli",
+        "german": "Glockenspiel",
+        "french": "Jeu de timbres / Glockenspiel",
+        "spanish": "Glockenspiel / Juego de campanas"
+      }
+    },
+    {
+      "name": "Xylophone",
+      "keys": ["C"],
+      "abbreviations": ["Xyl."],
+      "languages": {
+        "croatian": "Ksilofon",
+        "serbian_latin": "Ksilofon",
+        "serbian_cyrillic": "Ксилофон",
+        "dutch": "Xylofoon",
+        "italian": "Xilofono / Silofono",
+        "german": "Xylophon",
+        "french": "Xylophone",
+        "spanish": "Xilófono"
+      }
+    },
+    {
+      "name": "Marimba",
+      "keys": ["C"],
+      "abbreviations": ["Mar.", "Mba."],
+      "languages": {
+        "croatian": "Marimba",
+        "serbian_latin": "Marimba",
+        "serbian_cyrillic": "Маримба",
+        "dutch": "Marimba",
+        "italian": "Marimba",
+        "german": "Marimbaphon / Marimba",
+        "french": "Marimba",
+        "spanish": "Marimba"
+      }
+    },
+    {
+      "name": "Vibraphone",
+      "keys": ["C"],
+      "abbreviations": ["Vib."],
+      "languages": {
+        "croatian": "Vibrafon",
+        "serbian_latin": "Vibrafon",
+        "serbian_cyrillic": "Вибрафон",
+        "dutch": "Vibrafoon",
+        "italian": "Vibrafono",
+        "german": "Vibraphon",
+        "french": "Vibraphone",
+        "spanish": "Vibráfono"
+      }
+    },
+    {
+      "name": "Tubular Bells (Chimes)",
+      "keys": ["C"],
+      "abbreviations": ["Ch.", "Tub. Bells"],
+      "languages": {
+        "croatian": "Cjevasta zvona",
+        "serbian_latin": "Cevasta zvona",
+        "serbian_cyrillic": "Цеваста звона",
+        "dutch": "Buisklokken",
+        "italian": "Campane tubolari",
+        "german": "Röhrenglocken",
+        "french": "Cloches tubulaires",
+        "spanish": "Campanas tubulares"
+      }
+    },
+    {
+      "name": "Crotales",
+      "keys": ["C"],
+      "abbreviations": ["Crot."],
+      "languages": {
+        "croatian": "Krotali / Antičke činele",
+        "serbian_latin": "Krotali / Antički čineli",
+        "serbian_cyrillic": "Кротали / Антички чинели",
+        "dutch": "Crotales / Antieke bekkens",
+        "italian": "Crotali",
+        "german": "Zimbeln / Crotales",
+        "french": "Cymbales antiques / Crotales",
+        "spanish": "Crótalos"
+      }
+    },
+    {
+      "name": "Celesta",
+      "keys": ["C"],
+      "abbreviations": ["Cel."],
+      "languages": {
+        "croatian": "Čelesta",
+        "serbian_latin": "Čelesta",
+        "serbian_cyrillic": "Челеста",
+        "dutch": "Celesta",
+        "italian": "Celesta",
+        "german": "Celesta",
+        "french": "Célesta",
+        "spanish": "Celesta"
+      }
+    },
+    {
+      "name": "Timbales (Latin)",
+      "keys": ["None (Neutral)"],
+      "abbreviations": ["Timb."],
+      "languages": {
+        "croatian": "Timbalesi",
+        "serbian_latin": "Timbalesi",
+        "serbian_cyrillic": "Тимбалеси",
+        "dutch": "Timbales",
+        "italian": "Timbales latini",
+        "german": "Timbales / Pailas",
+        "french": "Timbales créoles / Timbales latines",
+        "spanish": "Timbales / Pailas"
+      }
+    },
+    {
+      "name": "Unpitched Percussion",
+      "keys": ["None (Neutral)"],
+      "abbreviations": ["Perc."],
+      "languages": {
+        "croatian": "Udaraljke (neodređene visine tona)",
+        "serbian_latin": "Udaraljke (neodređene visine tona)",
+        "serbian_cyrillic": "Удараљке (неодређене висине тона)",
+        "dutch": "Slagwerk (ongestemd) / Percussie",
+        "italian": "Percussione indeterminata",
+        "german": "Schlagzeug (unbestimmte Tonhöhe)",
+        "french": "Batterie / Percussion indéterminée",
+        "spanish": "Percusión indeterminada"
+      }
+    }
+  ],
+  "strings_keyboards": [
+    {
+      "name": "Double Bass",
+      "keys": ["C"],
+      "abbreviations": ["D. B.", "Cb."],
+      "languages": {
+        "croatian": "Kontrabas",
+        "serbian_latin": "Kontrabas",
+        "serbian_cyrillic": "Контрабас",
+        "dutch": "Contrabas",
+        "italian": "Contrabbasso",
+        "german": "Kontrabass",
+        "french": "Contrebasse",
+        "spanish": "Contrabajo"
+      }
+    },
+    {
+      "name": "Electric Bass",
+      "keys": ["C"],
+      "abbreviations": ["E. Bass", "Bass Gtr."],
+      "languages": {
+        "croatian": "Bas-gitara / Električni bas",
+        "serbian_latin": "Bas-gitara / Električni bas",
+        "serbian_cyrillic": "Бас-гитара / Електрични бас",
+        "dutch": "Elektrische bas / Basgitaar",
+        "italian": "Basso elettrico",
+        "german": "E-Bass",
+        "french": "Basse électrique",
+        "spanish": "Bajo eléctrico"
+      }
+    },
+    {
+      "name": "Electric Guitar",
+      "keys": ["C"],
+      "abbreviations": ["E. Gtr.", "El. Guit."],
+      "languages": {
+        "croatian": "Električna gitara",
+        "serbian_latin": "Električna gitara",
+        "serbian_cyrillic": "Електрична гитара",
+        "dutch": "Elektrische gitaar",
+        "italian": "Chitarra elettrica",
+        "german": "E-Gitarre",
+        "french": "Guitare électrique",
+        "spanish": "Guitarra eléctrica"
+      }
+    },
+    {
+      "name": "Synthesizer / Keyboard / Piano",
+      "keys": ["C"],
+      "abbreviations": ["Synth.", "Kbd.", "Pno.", "Pf."],
+      "languages": {
+        "croatian": "Sintesajzer / Klavijature / Klavir",
+        "serbian_latin": "Sintisajzer / Klavijature / Klavir",
+        "serbian_cyrillic": "Синтисајзер / Клавијатуре / Клавир",
+        "dutch": "Synthesizer / Toetsen / Piano",
+        "italian": "Sintetizzatore / Tastiera / Pianoforte",
+        "german": "Synthesizer / Keyboard / Klavier",
+        "french": "Synthétiseur / Clavier / Piano",
+        "spanish": "Sintetizador / Teclado / Piano"
+      }
+    }
+  ],
+  "vocals": [
+    {
+      "name": "Soprano",
+      "keys": ["C"],
+      "abbreviations": ["S.", "Sop."],
+      "languages": {
+        "croatian": "Sopran",
+        "serbian_latin": "Sopran",
+        "serbian_cyrillic": "Сопран",
+        "dutch": "Sopraan",
+        "italian": "Soprano",
+        "german": "Sopran",
+        "french": "Soprano",
+        "spanish": "Soprano"
+      }
+    },
+    {
+      "name": "Mezzo-Soprano / Alto",
+      "keys": ["C"],
+      "abbreviations": ["M. S.", "Mez.", "A.", "Alt."],
+      "languages": {
+        "croatian": "Mezzosopran / Alt",
+        "serbian_latin": "Mecosopran / Alt",
+        "serbian_cyrillic": "Мецосопран / Алт",
+        "dutch": "Mezzosopraan / Alt",
+        "italian": "Mezzosoprano / Contralto",
+        "german": "Mezzosopran / Alt",
+        "french": "Mezzo-soprano / Voix d'alto (Contralto)",
+        "spanish": "Mezzosoprano / Contralto"
+      }
+    },
+    {
+      "name": "Tenor",
+      "keys": ["C"],
+      "abbreviations": ["T.", "Ten."],
+      "languages": {
+        "croatian": "Tenor",
+        "serbian_latin": "Tenor",
+        "serbian_cyrillic": "Тенор",
+        "dutch": "Tenor",
+        "italian": "Tenore",
+        "german": "Tenor",
+        "french": "Ténor",
+        "spanish": "Tenor"
+      }
+    },
+    {
+      "name": "Baritone / Bass",
+      "keys": ["C"],
+      "abbreviations": ["Bar.", "B.", "Bs."],
+      "languages": {
+        "croatian": "Bariton / Bas",
+        "serbian_latin": "Bariton / Bas",
+        "serbian_cyrillic": "Баритон / Бас",
+        "dutch": "Bariton / Bas",
+        "italian": "Baritono / Basso",
+        "german": "Bariton / Bass",
+        "french": "Baryton / Basse",
+        "spanish": "Barítono / Bajo"
+      }
+    }
+  ]
+}
