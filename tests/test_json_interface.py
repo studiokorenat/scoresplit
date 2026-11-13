@@ -201,6 +201,20 @@ def test_edits_file_with_wrong_fields_lists_every_mistake(tmp_path: Path) -> Non
     assert [problem.split(":")[0] for problem in error["problems"]] == ["parts.0.kind", "parts.1.export"]
 
 
+
+def test_edits_file_with_a_huge_page_count_is_bad_input_not_a_hang(tmp_path: Path) -> None:
+    # Without a limit, loading this file would walk over a trillion pages.
+    pdf = make_pdf(tmp_path / "score.pdf", 3)
+    edits = edits_file_for(pdf, tmp_path)
+    data = json.loads(edits.read_text(encoding="utf-8"))
+    data["page_count"] = 1_000_000_000_000
+    edits.write_text(json.dumps(data), encoding="utf-8")
+
+    result = runner.invoke(cli.app, ["split", str(pdf), "--edits", str(edits), "--yes", "--json"])
+    error = json_error(result.stdout, cli.EXIT_BAD_INPUT)
+    assert error["message"] == "edits file edits.json is not a valid scoresplit result"
+    assert [problem.split(":")[0] for problem in error["problems"]] == ["page_count"]
+
 @pytest.mark.parametrize(
     ("content", "message"),
     [

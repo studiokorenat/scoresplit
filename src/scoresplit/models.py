@@ -366,7 +366,13 @@ class Result(BaseModel):
     schema_version: int = SCHEMA_VERSION
     source: str  # file name of the analysed PDF
     sha256: str  # fingerprint of the PDF: saved edits only apply to the same PDF
-    page_count: int
+    # Limited like the page numbers: an edits file can come from anyone, and
+    # working out the extra pages walks over every page from 1 to page_count,
+    # so "page_count": 1000000000000 would hang the program. Field(ge=0,
+    # le=...) means "0 <= page_count <= MAX_PAGE_NUMBER" (ge = greater or
+    # equal, le = less or equal). Pydantic checks fields BEFORE the
+    # mode="after" validator below runs, so a bad value never gets there.
+    page_count: int = Field(ge=0, le=MAX_PAGE_NUMBER)
     ocr_pages: int = 0  # how many pages were read with OCR (0 = a text PDF)
     title: str | None = None
     composer: str | None = None

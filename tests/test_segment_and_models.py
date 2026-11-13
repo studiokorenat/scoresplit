@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from scoresplit.exporter import safe_filename
 from scoresplit.metadata import nice_case
 from scoresplit.models import (
+    MAX_PAGE_NUMBER,
     Extra,
     PageInfo,
     Part,
@@ -454,6 +455,20 @@ def test_a_result_of_another_schema_version_is_refused() -> None:
     with pytest.raises(ValidationError, match="schema_version 2 is not supported"):
         Result(schema_version=2, source="t.pdf", sha256="0", page_count=1)
 
+
+
+# An edits file can come from anyone (the web tool takes uploads). A huge
+# page_count must be refused AT ONCE: working out the extra pages walks over
+# every page from 1 to page_count, so "1000000000000" would hang the program.
+@pytest.mark.parametrize("page_count", [MAX_PAGE_NUMBER + 1, 1_000_000_000_000, -1])
+def test_a_page_count_out_of_range_is_refused(page_count: int) -> None:
+    with pytest.raises(ValidationError, match="page_count"):
+        make_result([], page_count=page_count)
+
+
+def test_the_highest_page_count_still_loads() -> None:
+    result = make_result([Part(name="Flute", pages="1")], page_count=MAX_PAGE_NUMBER)
+    assert result.extra == [Extra(reason="unassigned", pages=f"2-{MAX_PAGE_NUMBER}")]
 
 # --- Names as printed ----------------------------------------------------------
 
