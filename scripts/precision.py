@@ -118,6 +118,20 @@ def pdf_for(golden_path: Path) -> Path:
     return EXAMPLES / f"{golden_path.stem}.pdf"
 
 
+def draft_pdf(name: str) -> Path:
+    """
+    The example PDF that `--draft NAME` means: "haustor" or "haustor.pdf"
+    -> example/haustor.pdf. ".pdf" is added only when it isn't there yet,
+    so a name with a dot in it keeps its dot: "my.score" -> my.score.pdf.
+    (Path.with_suffix would REPLACE ".score" and give my.pdf.)
+    """
+    # Path(name).name drops any folders typed in front: the PDF must be in example/.
+    file_name = Path(name).name
+    if not file_name.lower().endswith(".pdf"):
+        file_name += ".pdf"
+    return EXAMPLES / file_name
+
+
 def load_golden(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -655,12 +669,20 @@ def main() -> int:
     args = parser.parse_args()
     console = Console()
 
+    # Check the draft's PDF first: a typo in the name should get a clear
+    # message, not a traceback from deep inside the detection.
+    if args.draft:
+        pdf = draft_pdf(args.draft)
+        if not pdf.exists():
+            console.print(f"[red]{pdf.name}: missing in example/, no draft written[/red]")
+            return 4
+
     if not tesseract_available():
         console.print("[red]Tesseract is not installed; the scanned examples need it.[/red]")
         return 3
 
     if args.draft:
-        target = write_draft(EXAMPLES / Path(args.draft).with_suffix(".pdf").name)
+        target = write_draft(draft_pdf(args.draft))
         console.print(f"Draft written to {target}. Now correct it by hand against the PDF.")
         return 0
 

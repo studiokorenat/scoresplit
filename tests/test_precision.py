@@ -251,3 +251,18 @@ def test_drops_compares_with_the_baseline() -> None:
     assert precision.drops(baseline | {"names_right": 0}, old_baseline) == []
     better_or_same = baseline | {"keys_right": 4}
     assert precision.drops(better_or_same, baseline) == []
+
+
+def test_draft_pdf_adds_pdf_only_when_missing() -> None:
+    # A dot inside the name stays: "my.score" is not cut to "my".
+    assert precision.draft_pdf("my.score") == precision.EXAMPLES / "my.score.pdf"
+    assert precision.draft_pdf("x.pdf") == precision.EXAMPLES / "x.pdf"
+    assert precision.draft_pdf("x.PDF") == precision.EXAMPLES / "x.PDF"
+    assert precision.draft_pdf("x") == precision.EXAMPLES / "x.pdf"
+
+
+def test_draft_of_a_missing_pdf_says_so_without_a_traceback(monkeypatch, capsys) -> None:
+    # monkeypatch.setattr: pretend the command line was "precision.py --draft ...".
+    monkeypatch.setattr("sys.argv", ["precision.py", "--draft", "no-such-score"])
+    assert precision.main() == 4
+    assert "no-such-score.pdf: missing in example/" in capsys.readouterr().out
