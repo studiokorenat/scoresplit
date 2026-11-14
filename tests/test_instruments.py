@@ -934,3 +934,59 @@ def test_e_with_a_dot_is_e_flat_only_before_a_full_name(
     part = find_part_name(text)
     assert part is not None
     assert (part.instrument_id, part.key) == (instrument_id, key)
+
+
+@pytest.mark.parametrize(
+    ("text", "same_as"),
+    [
+        # The halves of a "/" name get the same "E." = Eb correction as a
+        # single name, so "E. Bass/Tuba" on one page and "E. Bass" on the next
+        # are the same Eb part. Each is read exactly like the name printed
+        # with a real flat. (The generic "Bass" before a specific second
+        # name takes that name's instrument, as for "Bass/Electric Bass".)
+        ("E. Bass/Tuba", "Eb Bass/Tuba"),
+        ("E. Bass / String Bass", "Eb Bass / String Bass"),
+    ],
+)
+def test_e_with_a_dot_is_e_flat_in_a_slash_name(text: str, same_as: str) -> None:
+    part = find_part_name(text)
+    expected = find_part_name(same_as)
+    assert part is not None and expected is not None
+    assert part.key == "Eb"
+    assert (part.instrument_id, part.key, part.label, part.wording) == (
+        expected.instrument_id,
+        expected.key,
+        expected.label,
+        expected.wording,
+    )
+
+
+def test_e_bass_slash_tuba_keeps_tuba_as_the_second_name() -> None:
+    part = find_part_name("E. Bass/Tuba")
+    assert part is not None
+    assert (part.key, part.label, part.wording) == ("Eb", "Bass/Tuba in Eb", "Eb Bass/Tuba")
+
+
+@pytest.mark.parametrize(
+    ("text", "instrument_id", "key"),
+    [
+        # Still what they were: the single name, and real bass guitar names
+        # (also as the first half of a "/" name).
+        ("E. Bass", "bass", "Eb"),
+        ("Bass Guitar", "bass_guitar", None),
+        ("Electric Bass", "bass_guitar", None),
+        ("Bass/Electric Bass", "bass_guitar", None),
+        ("Bass Guitar/Tuba", "bass_guitar", None),
+        # One word: no room for a flat sign, so the abbreviation stays.
+        ("E.Bass/Tuba", "bass_guitar", None),
+        # A fully abbreviated first half keeps its meaning.
+        ("E. Hn./Tuba", "english_horn", None),
+        ("E. Gtr./Bass", "electric_guitar", None),
+    ],
+)
+def test_the_slash_correction_leaves_other_names_alone(
+    text: str, instrument_id: str, key: str | None
+) -> None:
+    part = find_part_name(text)
+    assert part is not None
+    assert (part.instrument_id, part.key) == (instrument_id, key)

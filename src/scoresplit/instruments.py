@@ -1340,6 +1340,12 @@ def find_part_name(text: str) -> PartName | None:
         left = _best_instrument_match(tokens[:slash])
         right = _best_instrument_match(tokens[slash + 1 :])
         if left and right:
+            # Each half gets the same "E." = Eb check as a single name:
+            # "E. Bass/Tuba" is "Eb Bass/Tuba", like "E. Bass" alone is "Eb
+            # Bass". Each half with its own words, so the positions it gives
+            # are counted the same way as `left` and `right` count theirs.
+            left = _e_flat_read_as_dot(tokens[:slash], left)
+            right = _e_flat_read_as_dot(tokens[slash + 1 :], right)
             match = left
             if left.instrument.generic and not right.instrument.generic:
                 # Keep where the name STARTS (left.start), so the label and
