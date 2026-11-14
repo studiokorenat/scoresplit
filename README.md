@@ -435,6 +435,16 @@ page, so deleting a part moves its pages to `extra/` by itself. Results from
 older versions (`schema_version` 1 to 3) are refused: detect the parts
 again. (Version 3 had the same JSON; version 4 changed the CSV columns.)
 
+Limits, so that an edits file from anyone can't slow the program down (each
+is far above any real score; a file over a limit is refused as invalid,
+exit code 2):
+
+| What | Limit |
+|---|---|
+| a page number, and `page_count` | 100 000 |
+| parts | 1 000 |
+| pages all parts list together (a page in two parts counts twice), and the same for `extra` | 200 000 |
+
 ---
 
 ## Development

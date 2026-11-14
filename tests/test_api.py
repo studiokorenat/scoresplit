@@ -8,13 +8,14 @@ well under a second.
 """
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
 from scoresplit import api
 from scoresplit.cache import file_sha256
-from scoresplit.models import Extra, Part
+from scoresplit.models import MAX_LISTED_PAGES, MAX_PAGE_NUMBER, MAX_PARTS, Extra, Part
 from scoresplit.ocr import OcrUnavailableError
 
 # The tiny-PDF and page-map helpers of the exporter tests. pytest puts the
@@ -158,6 +159,41 @@ def test_load_edits_refuses_a_file_of_an_older_scoresplit(tmp_path: Path, versio
     map_file.write_text(json.dumps(old), encoding="utf-8")
     with pytest.raises(api.BadInputError, match=f"has schema_version {version or 1}, but this scoresplit reads only version 4"):
         api.load_edits(map_file, pdf)
+
+
+def test_load_edits_refuses_a_small_file_that_lists_millions_of_pages(tmp_path: Path) -> None:
+    # The review's measurement: 300 parts that all say "1-100000" are an
+    # 11 KB file, but took 25 seconds and 1.2 GB. The web tool gets edits
+    # files from anyone, so this must be a quick, ordinary bad-input error.
+    pdf = make_pdf(tmp_path / "score.pdf", 2)
+    data = make_map([Part(name="Flute", pages="1")]).model_dump()
+    data["parts"] = [{"name": f"Part {i}", "pages": f"1-{MAX_PAGE_NUMBER}"} for i in range(300)]
+    edits_file = tmp_path / "edits.json"
+    edits_file.write_text(json.dumps(data), encoding="utf-8")
+    assert edits_file.stat().st_size < 15_000  # about 13 KB
+
+    start = time.perf_counter()
+    with pytest.raises(api.BadInputError, match="is not a valid scoresplit result") as caught:
+        api.load_edits(edits_file, pdf, force=True)
+    assert time.perf_counter() - start < 1
+    assert caught.value.problems == [
+        f"parts: Value error, the parts list 30000000 pages together, more than {MAX_LISTED_PAGES} "
+        "(a page in two parts counts twice)"
+    ]
+
+
+def test_load_edits_refuses_too_many_parts(tmp_path: Path) -> None:
+    pdf = make_pdf(tmp_path / "score.pdf", 2)
+    data = make_map([]).model_dump()
+    data["parts"] = [{"name": f"Part {i}", "pages": "1"} for i in range(MAX_PARTS + 1)]
+    edits_file = tmp_path / "edits.json"
+    edits_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(api.BadInputError, match="is not a valid scoresplit result") as caught:
+        api.load_edits(edits_file, pdf, force=True)
+    assert caught.value.problems == [
+        f"parts: List should have at most {MAX_PARTS} items after validation, not {MAX_PARTS + 1}"
+    ]
 
 
 def test_load_edits_reads_back_edited_pages_and_works_out_the_extra_pages(tmp_path: Path) -> None:

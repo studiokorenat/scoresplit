@@ -6,19 +6,24 @@ These tests build small fake page lists by hand, so they run in milliseconds
 and show exactly which rule is being checked.
 """
 
+import time
+
 import pytest
 from pydantic import ValidationError
 
 from scoresplit.exporter import safe_filename
 from scoresplit.metadata import nice_case
 from scoresplit.models import (
+    MAX_LISTED_PAGES,
     MAX_PAGE_NUMBER,
+    MAX_PARTS,
     Extra,
     PageInfo,
     Part,
     PartName,
     Result,
     check_result,
+    count_listed_pages,
     format_page_ranges,
     parse_page_ranges,
 )
@@ -445,6 +450,21 @@ def test_check_result_warns_about_a_page_in_two_parts() -> None:
     assert report.warnings == ["'Flute' and 'Oboe' share page(s) 3"]
 
 
+def test_check_result_reports_shared_pages_only_inside_the_pdf() -> None:
+    # Pages past the end are already errors. Before, they were ALSO stored as
+    # shared pages, one by one: the memory of the 300 x "1-100000" file.
+    result = make_result([Part(name="Flute", pages="1-20"), Part(name="Oboe", pages="5-30")], page_count=10)
+    report = check_result(result)
+    assert report.errors == [
+        "'Flute': page(s) 11-20 don't exist (PDF has 10)",
+        "'Oboe': page(s) 11-30 don't exist (PDF has 10)",
+    ]
+    assert report.warnings == ["'Flute' and 'Oboe' share page(s) 5-10"]
+    # Parts that share only pages the PDF doesn't have get no warning.
+    result = make_result([Part(name="Flute", pages="11-12"), Part(name="Oboe", pages="12")], page_count=10)
+    assert check_result(result).warnings == []
+
+
 def test_check_result_warns_about_two_same_name_parts_sharing_a_page() -> None:
     # Two parts may have the same name: the check compares parts, not names.
     result = make_result([Part(name="Euphonium", pages="1-3"), Part(name="Euphonium", pages="3-4")])
@@ -469,6 +489,97 @@ def test_a_page_count_out_of_range_is_refused(page_count: int) -> None:
 def test_the_highest_page_count_still_loads() -> None:
     result = make_result([Part(name="Flute", pages="1")], page_count=MAX_PAGE_NUMBER)
     assert result.extra == [Extra(reason="unassigned", pages=f"2-{MAX_PAGE_NUMBER}")]
+
+
+# --- Size limits of an edits file ------------------------------------------------
+# Parts may share pages, and MAX_PAGE_NUMBER limits ONE page number, not all
+# of them together. So 300 parts that all said "1-100000" (an 11 KB edits
+# file) made 30 million page numbers: 25 seconds and 1.2 GB of memory. Now
+# the pages are counted from the text first, before any list is built.
+
+# The size the review measured: 300 parts, each "1-100000".
+ALL_PAGES = f"1-{MAX_PAGE_NUMBER}"
+
+
+def test_count_listed_pages_counts_without_building_the_list() -> None:
+    assert count_listed_pages("3-5,9") == 4
+    assert count_listed_pages(ALL_PAGES) == MAX_PAGE_NUMBER
+    assert count_listed_pages([9, 3]) == 2
+    assert count_listed_pages("") == 0
+    # A page in two ranges counts twice. That's fine: the count is only used
+    # to refuse absurd files, and a real file doesn't repeat pages.
+    assert count_listed_pages("1-5,3-7") == 10
+
+
+@pytest.mark.parametrize("pages", ["5-3", "a", "3-", f"1-{MAX_PAGE_NUMBER + 1}", None, 7, [1, "x"]])
+def test_count_listed_pages_counts_nothing_for_a_text_that_is_no_page_range(pages: object) -> None:
+    # Loading keeps a bad page text, and check_result reports it (or pydantic
+    # reports a value that isn't text at all). The count just skips it.
+    assert count_listed_pages(pages) == 0
+
+
+def edits_data(parts: list[dict], extra: list[dict] | None = None, page_count: int = 10) -> dict:
+    """Helper: the JSON of an edits file, as load_edits gets it (plain dicts)."""
+    return {
+        "source": "t.pdf",
+        "sha256": "0" * 64,
+        "page_count": page_count,
+        "parts": parts,
+        "extra": extra or [],
+    }
+
+
+@pytest.mark.parametrize("field", ["parts", "extra"])
+def test_a_result_listing_too_many_pages_is_refused_at_once(field: str) -> None:
+    # Extra groups are read when a result is loaded too (for their reasons),
+    # so they count in the same way as the parts.
+    if field == "parts":
+        data = edits_data([{"name": f"Part {i}", "pages": ALL_PAGES} for i in range(300)])
+    else:
+        data = edits_data([], extra=[{"reason": "cover", "pages": ALL_PAGES} for _ in range(300)])
+
+    start = time.perf_counter()
+    with pytest.raises(ValidationError, match=f"list 30000000 pages together, more than {MAX_LISTED_PAGES}"):
+        Result.model_validate(data)
+    # Before the fix this took 25 seconds; counting from the text takes a few
+    # milliseconds. The second is a generous margin for a slow machine.
+    assert time.perf_counter() - start < 1
+
+
+def test_a_result_listing_exactly_the_limit_still_loads() -> None:
+    # Two parts with every page of the biggest PDF allowed: the score and a
+    # part that has the same pages. Silly, but within the limit.
+    parts = [{"name": "Score", "pages": ALL_PAGES}, {"name": "Flute", "pages": ALL_PAGES}]
+    result = Result.model_validate(edits_data(parts, page_count=MAX_PAGE_NUMBER))
+    assert MAX_LISTED_PAGES == 2 * MAX_PAGE_NUMBER
+    assert [part.pages for part in result.parts] == [ALL_PAGES, ALL_PAGES]
+    # The limit counts each list on its own: parts at the limit plus an extra
+    # group still load (the extra pages are worked out again anyway).
+    data = edits_data(parts, extra=[{"reason": "cover", "pages": "1"}], page_count=MAX_PAGE_NUMBER)
+    assert Result.model_validate(data).extra == []
+
+
+def test_parts_made_in_code_are_counted_too() -> None:
+    # Code (the pipeline, a GUI) passes Part objects, not dicts.
+    with pytest.raises(ValidationError, match="list 300000 pages together"):
+        make_result([Part(name=f"Part {i}", pages=ALL_PAGES) for i in range(3)], page_count=MAX_PAGE_NUMBER)
+
+
+def test_a_result_with_too_many_parts_is_refused() -> None:
+    # The biggest real score in tests/golden has 91 parts.
+    parts = [{"name": f"Part {i}", "pages": "1"} for i in range(MAX_PARTS + 1)]
+    with pytest.raises(ValidationError, match=f"parts\n  List should have at most {MAX_PARTS} items"):
+        Result.model_validate(edits_data(parts))
+    # The limit itself is fine.
+    assert len(Result.model_validate(edits_data(parts[:MAX_PARTS])).parts) == MAX_PARTS
+
+
+@pytest.mark.parametrize("pages", [7, None, {"from": 1}])
+def test_pages_that_are_no_text_give_a_clear_error(pages: object) -> None:
+    # This used to crash with "AttributeError: 'int' object has no attribute
+    # 'split'" (a traceback) instead of naming the mistake.
+    with pytest.raises(ValidationError, match="parts.0.pages\n  Input should be a valid string"):
+        Result.model_validate(edits_data([{"name": "Flute", "pages": pages}]))
 
 
 # --- Control characters in an edits file ----------------------------------------

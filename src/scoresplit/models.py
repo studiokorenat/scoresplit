@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 # A progress callback: a function that receives (done, total) and returns
 # nothing, e.g. progress(12, 238) = "12 of 238 pages done". Used by the page
@@ -203,6 +203,23 @@ SCHEMA_VERSION = 4
 # beyond the PDF's real page count are reported by check_result.
 MAX_PAGE_NUMBER = 100_000
 
+# MAX_PAGE_NUMBER limits ONE page number, not all of them together. Parts may
+# share pages, so 300 parts that each say "1-100000" (an 11 KB edits file)
+# made 30 million page numbers: 25 seconds and 1.2 GB of memory. Two more
+# limits keep any edits file cheap, also one sent to the web tool by anyone:
+#
+#   MAX_PARTS: the number of parts. The biggest real score in tests/golden
+#   has 91 parts.
+#
+#   MAX_LISTED_PAGES: how many pages the parts list together (a page in two
+#   parts counts twice), and the same for the extra groups. A real result
+#   lists each page about once, so twice the biggest PDF allowed leaves room
+#   for parts that share pages. The pages are counted from the text BEFORE
+#   any list of pages is built (see count_listed_pages), so even a file far
+#   above the limit is refused in milliseconds.
+MAX_PARTS = 1000
+MAX_LISTED_PAGES = 2 * MAX_PAGE_NUMBER
+
 # The clefs a part can have. "percussion" is the neutral clef of drum parts.
 Clef = Literal["treble", "bass", "alto", "tenor", "percussion"]
 
@@ -254,6 +271,49 @@ def _check_page_number(page: int) -> int:
     return page
 
 
+def _page_runs(value: str | list[int]) -> list[tuple[int, int]]:
+    """
+    Read a page text into its runs of pages, as (first, last) pairs, WITHOUT
+    building the list of every page in between:
+
+        _page_runs("3-5,9")   -> [(3, 5), (9, 9)]
+        _page_runs([9, 3])    -> [(9, 9), (3, 3)]
+        _page_runs("")        -> []
+
+    The runs are in the order written and may overlap ("1-5,3-7").
+
+    Raises ValueError for text that isn't a page range ("3-", "a", "5-3",
+    a page above MAX_PAGE_NUMBER), and TypeError for a value that is no
+    text or list at all (7, None from an edited JSON file).
+    """
+    # isinstance(x, list) is like PHP's is_array($x).
+    if isinstance(value, list):
+        # A pair (page, page) for each page of the list: a run of one page.
+        return [(page, page) for page in (_check_page_number(int(p)) for p in value)]
+    if not isinstance(value, str):
+        # Without this check, value.split() below would crash with an
+        # AttributeError, which pydantic doesn't turn into a clear error.
+        raise TypeError(f"pages must be text like '3-5,9', not {type(value).__name__}")
+
+    runs: list[tuple[int, int]] = []
+    for chunk in value.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue  # skip empty pieces like in "3-5,,9"
+        if "-" in chunk:
+            start_text, end_text = chunk.split("-", 1)
+            start, end = int(start_text), int(end_text)
+            if end < start:
+                raise ValueError(f"page range '{chunk}' goes backwards")
+            # Check the end here, BEFORE anyone builds the range: that's what
+            # keeps a huge range like "1-999999999999" from filling the memory.
+            runs.append((start, _check_page_number(end)))
+        else:
+            page = _check_page_number(int(chunk))
+            runs.append((page, page))
+    return runs
+
+
 def parse_page_ranges(value: str | list[int]) -> list[int]:
     """
     Turn a human page-range string into a sorted list of page numbers.
@@ -267,30 +327,35 @@ def parse_page_ranges(value: str | list[int]) -> list[int]:
         parse_page_ranges([9, 3])    -> [3, 9]
         parse_page_ranges("")        -> []
 
-    Raises ValueError for text that isn't a page range ("3-", "a", "5-3").
+    Raises ValueError for text that isn't a page range ("3-", "a", "5-3"),
+    TypeError for a value that is no text or list (see _page_runs).
     """
-    # isinstance(x, list) is like PHP's is_array($x).
-    if isinstance(value, list):
-        return sorted(set(_check_page_number(int(p)) for p in value))
-
     pages: set[int] = set()  # a set ignores duplicates automatically
-    for chunk in value.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue  # skip empty pieces like in "3-5,,9"
-        if "-" in chunk:
-            start_text, end_text = chunk.split("-", 1)
-            start, end = int(start_text), int(end_text)
-            if end < start:
-                raise ValueError(f"page range '{chunk}' goes backwards")
-            # Check the end BEFORE building the range: that's what keeps a
-            # huge range from filling the memory.
-            _check_page_number(end)
-            # range(a, b) stops BEFORE b, so +1 to include the last page.
-            pages.update(range(start, end + 1))
-        else:
-            pages.add(_check_page_number(int(chunk)))
+    for start, end in _page_runs(value):
+        # range(a, b) stops BEFORE b, so +1 to include the last page.
+        pages.update(range(start, end + 1))
     return sorted(pages)
+
+
+def count_listed_pages(value: object) -> int:
+    """
+    How many pages a page text lists, counted WITHOUT building the list, so
+    "1-100000" costs one subtraction instead of 100 000 numbers:
+
+        count_listed_pages("3-5,9")    -> 4
+        count_listed_pages([9, 3])     -> 2
+        count_listed_pages("1-5,3-7")  -> 10  (pages 3-5 are written twice)
+
+    Anything that isn't a valid page text counts 0 ("5-3", "a", None): it
+    is reported elsewhere (by check_result, or by pydantic for a value that
+    isn't text). Used to refuse an absurdly big result before it is built
+    (see MAX_LISTED_PAGES).
+    """
+    try:
+        # end - start + 1: the run 3-5 holds 3 pages (3, 4 and 5).
+        return sum(end - start + 1 for start, end in _page_runs(value))
+    except (ValueError, TypeError):
+        return 0
 
 
 def format_page_ranges(pages: list[int]) -> str:
@@ -431,9 +496,28 @@ class Result(BaseModel):
     title: str | None = None
     composer: str | None = None
     arranger: str | None = None
-    parts: list[Part] = Field(default_factory=list)
+    # max_length=MAX_PARTS: at most that many parts. Pydantic stops reading
+    # the list as soon as it is too long, so a file with a million parts is
+    # refused without reading them all.
+    parts: list[Part] = Field(default_factory=list, max_length=MAX_PARTS)
     extra: list[Extra] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)  # about the whole PDF
+
+    # mode="before" runs on the raw data, BEFORE pydantic builds a Part or
+    # Extra from each item (building one reads its whole page list). So a
+    # file that lists millions of pages is refused while it is still cheap.
+    @field_validator("parts", "extra", mode="before")
+    @classmethod
+    def _limit_listed_pages(cls, items: object, info: ValidationInfo) -> object:
+        """Refuse a list of parts (or extra groups) above MAX_LISTED_PAGES."""
+        listed = _total_listed_pages(items)
+        if listed > MAX_LISTED_PAGES:
+            # info.field_name is "parts" or "extra": the field being checked.
+            raise ValueError(
+                f"the {info.field_name} list {listed} pages together, more than "
+                f"{MAX_LISTED_PAGES} (a page in two parts counts twice)"
+            )
+        return items
 
     @field_validator("schema_version")
     @classmethod
@@ -515,6 +599,24 @@ class Result(BaseModel):
         return title
 
 
+def _total_listed_pages(items: object) -> int:
+    """
+    How many pages a list of parts (or of extra groups) lists together, from
+    their page texts (see count_listed_pages). The items are dicts when they
+    come from a JSON file, Part or Extra objects when code made them. Anything
+    else counts 0: pydantic reports a value of the wrong type itself.
+    """
+    if not isinstance(items, list):
+        return 0
+    total = 0
+    for item in items:
+        # dict.get("pages") is like $item['pages'] ?? null in PHP;
+        # getattr(item, "pages", None) is the same for an object's field.
+        pages = item.get("pages") if isinstance(item, dict) else getattr(item, "pages", None)
+        total += count_listed_pages(pages)
+    return total
+
+
 def _pages_or_nothing(pages: str) -> list[int]:
     """parse_page_ranges, but an invalid page text gives [] (check_result reports it)."""
     try:
@@ -550,7 +652,9 @@ def check_result(result: Result, page_count: int | None = None) -> CheckReport:
 
     Warning:
 
-      * a page in two exported parts (allowed: that page goes into both files).
+      * a page in two exported parts (allowed: that page goes into both
+        files). Only pages the PDF has: a page past the end is an error
+        already, and is not stored again as a shared page.
 
     ``page_count`` is the number of pages of the PDF that will be cut; it
     defaults to the result's own.
@@ -585,6 +689,11 @@ def check_result(result: Result, page_count: int | None = None) -> CheckReport:
         if not pages:
             report.errors.append(f"'{part.name}': has no pages (give it pages, or set \"export\": false)")
         for page in pages:
+            # Only pages the PDF has. The others are reported as missing
+            # above; storing them here too, one by one, is what let parts
+            # that all said "1-100000" fill the memory on a 10-page PDF.
+            if page < 1 or page > page_count:
+                continue
             owner = first_owner.setdefault(page, index)
             if owner != index:
                 shared.setdefault((owner, index), []).append(page)
