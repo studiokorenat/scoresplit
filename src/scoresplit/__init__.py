@@ -8,7 +8,7 @@ The ``main`` function below is what runs when you type ``scoresplit`` in
 the terminal (see [project.scripts] in pyproject.toml).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def main() -> None:
