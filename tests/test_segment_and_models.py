@@ -19,6 +19,7 @@ from scoresplit.models import (
     MAX_PAGE_NUMBER,
     MAX_PARTS,
     Extra,
+    PageFacts,
     PageInfo,
     Part,
     PartName,
@@ -28,6 +29,8 @@ from scoresplit.models import (
     format_page_ranges,
     parse_page_ranges,
 )
+from scoresplit.classify import classify_page
+from scoresplit.models import TextSpan
 from scoresplit.segment import build_parts
 
 
@@ -893,3 +896,97 @@ def test_a_page_printed_sideways_is_a_part_of_its_own_at_zero_confidence() -> No
         "page printed sideways (or unreadable): please name it or join it to a part"
     ]
     assert [(e.reason, e.pages) for e in extras] == [("unassigned", "5")]
+
+
+# --- a sideways page in the middle of a part (review-fix-plan step 19) ----------
+
+
+def facts_page(number: int, name: str | None = None, sideways: bool = False) -> PageFacts:
+    """
+    Helper: the raw facts of a fake scanned page, as page_analyzer finds them.
+
+    * name given  -> an upright music page with that name at the top;
+    * no name     -> an upright music page without a readable name;
+    * sideways    -> music printed sideways: no staves upright, 12 with the
+                     page turned (like Tullamore page 100).
+    """
+    if sideways:
+        return PageFacts(page_number=number, source="ocr", ink_ratio=0.05, sideways_staff_count=12)
+    # A name sits in the top strip of the page (y0 = 0.03, see classify._name_lines).
+    header = [TextSpan(name, 0.05, 0.03, 0.25, 0.05, 11)] if name else []
+    return PageFacts(
+        page_number=number, source="ocr", ink_ratio=0.08, staff_count=10, header=header
+    )
+
+
+def parts_of(facts: list[PageFacts]):
+    """Classify the fake pages (classify.py), then cut them into parts (segment.py)."""
+    return build_parts([classify_page(page) for page in facts])
+
+
+SIDEWAYS_NOTE = "page printed sideways (or unreadable): please name it or join it to a part"
+
+
+def test_unnamed_pages_after_a_sideways_page_go_back_to_the_part_it_interrupted() -> None:
+    # Flute page 10 named, page 11 printed sideways, pages 12-13 without a
+    # name. 12-13 are Flute: the sideways page doesn't take them along.
+    parts, _, _ = parts_of(
+        [facts_page(10, "Flute"), facts_page(11, sideways=True), facts_page(12), facts_page(13)]
+    )
+    assert [(p.name, p.pages) for p in parts] == [
+        ("Flute", "10,12-13"),
+        ("Unknown Part (p11)", "11"),  # still its own part, for a person to check
+    ]
+    assert parts[1].confidence == 0.0
+    assert parts[1].notes == [SIDEWAYS_NOTE]
+    # The flute's own pages are never called "printed sideways".
+    assert not any("sideways" in note for note in parts[0].notes)
+
+
+def test_the_same_name_after_a_sideways_page_continues_the_part() -> None:
+    # Trombone 1 pages 95-96, page 97 printed sideways, Trombone 1 again on
+    # pages 98-100: ONE Trombone 1 part, not two halves where the second is
+    # taken for a copy (not exported) or "same name, different music".
+    parts, _, _ = parts_of(
+        [facts_page(95, "Trombone 1"), facts_page(96, "Trombone 1"), facts_page(97, sideways=True)]
+        + [facts_page(number, "Trombone 1") for number in (98, 99, 100)]
+    )
+    assert [(p.name, p.pages, p.export) for p in parts] == [
+        ("Trombone 1", "95-96,98-100", True),
+        ("Unknown Part (p97)", "97", True),
+    ]
+    assert parts[0].notes == []
+    assert parts[1].notes == [SIDEWAYS_NOTE]
+
+
+def test_another_name_after_a_sideways_page_starts_a_new_part_in_start_page_mode() -> None:
+    # Start-page mode (two start pages). After the sideways page 3 comes
+    # "Trombone 2" without a title: in start-page mode that alone would not
+    # cut the Trombone 1 part, but after sideways pages the name must agree.
+    pages = [
+        make_page(1, "Trombone", start=True, number_part="1"),
+        make_page(2, "Trombone", number_part="1"),
+        make_page(3, kind="unknown"),  # sideways
+        make_page(4, "Trombone", number_part="2"),
+        make_page(5, "Trombone", number_part="2"),
+        make_page(6, "Tuba", start=True),
+    ]
+    pages[2].sideways = True
+    parts, _, _ = build_parts(pages)
+    assert [(p.name, p.pages) for p in parts] == [
+        ("Trombone 1", "1-2"),
+        ("Unknown Part (p3)", "3"),
+        ("Trombone 2", "4-5"),
+        ("Tuba", "6"),
+    ]
+
+
+def test_unnamed_pages_after_a_sideways_page_with_no_part_before_are_not_called_sideways() -> None:
+    # Nothing to go back to: pages 2-3 become an unnamed part of their own.
+    parts, _, _ = parts_of([facts_page(1, sideways=True), facts_page(2), facts_page(3)])
+    assert [(p.name, p.pages) for p in parts] == [
+        ("Unknown Part (p1)", "1"),
+        ("Unknown Part (p2-3)", "2-3"),
+    ]
+    assert parts[0].notes == [SIDEWAYS_NOTE]
+    assert parts[1].notes[0] == "no part name could be read: please rename"

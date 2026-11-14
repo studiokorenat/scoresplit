@@ -365,6 +365,38 @@ def _starts_new_part(
     return False
 
 
+def _goes_back_after_sideways(
+    interrupted: Segment | None, info: PageInfo, infos: list[PageInfo], index: int, start_mode: bool
+) -> bool:
+    """
+    True when page `info`, the first upright page after a run of sideways
+    pages, continues the segment those pages interrupted.
+
+        Flute p10, p11 sideways, p12-13 without a name
+            -> Flute = 10,12-13 and "Unknown Part (p11)"
+        Trombone 1 p95-96, p97 sideways, "Trombone 1" again on p98-100
+            -> Trombone 1 = 95-96,98-100 and "Unknown Part (p97)"
+
+    * Music without a name goes back to the part (or score) before.
+    * A page with a name goes back only when it would have continued that
+      part without the sideways pages in between (_starts_new_part), AND its
+      name doesn't clearly say another part. (In start-page mode
+      _starts_new_part lets a non-start page with another name continue,
+      trusting the start pages; after sideways pages the part may well have
+      ended, so the name has to agree.)
+    * Anything else (a score page, a blank or cover page) is handled as
+      usual.
+    """
+    if interrupted is None:
+        return False
+    if info.kind == "unknown":
+        return info.has_staves
+    if info.kind != "part" or _starts_new_part(interrupted, info, infos, index, start_mode):
+        return False
+    identity = _segment_identity(interrupted)
+    return info.part is None or identity is None or not _names_conflict(identity, info.part)
+
+
 def _cut_into_segments(
     infos: list[PageInfo], start_mode: bool
 ) -> tuple[list[Segment], list[tuple[int, str]]]:
@@ -378,8 +410,31 @@ def _cut_into_segments(
     extras: list[tuple[int, str]] = []
     current: Segment | None = None
     seen_music = False  # becomes True at the first score/part page
+    # The segment (a part or the score) that the current run of sideways
+    # pages interrupted, or None. The pages after the run may go back to it:
+    # a sideways page in the middle of a part must not cut that part in two.
+    interrupted: Segment | None = None
 
     for index, info in enumerate(infos):
+        # Leaving a run of sideways pages: does the part that run interrupted
+        # go on? See _goes_back_after_sideways. Blank pages and unnamed pages
+        # without music don't count: they go to extra/ anyway.
+        if (
+            current is not None
+            and current.sideways
+            and not info.sideways
+            and info.kind != "blank"
+            and (info.kind != "unknown" or info.has_staves)
+        ):
+            if _goes_back_after_sideways(interrupted, info, infos, index, start_mode):
+                current = interrupted
+            elif info.kind == "unknown" and info.has_staves:
+                # Upright music without a name, and no part before the
+                # sideways pages to go back to: a part of its own, so the
+                # note never calls these upright pages "printed sideways".
+                current = Segment(kind="part")
+                segments.append(current)
+            interrupted = None
         if info.kind == "blank":
             extras.append((info.page_number, "blank"))
             continue
@@ -404,9 +459,11 @@ def _cut_into_segments(
 
         # Music printed sideways: a part of its own (see build_parts), also
         # in the middle of another part. More sideways pages in a row stay
-        # together.
+        # together. It can't be read, so it never joins the part around it:
+        # a person names it or joins it to a part (commit 0fa3f53).
         if info.sideways:
             if current is None or not current.sideways:
+                interrupted = current
                 current = Segment(kind="part", sideways=True)
                 segments.append(current)
             current.pages.append(info)
