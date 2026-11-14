@@ -15,7 +15,15 @@ import pytest
 
 from scoresplit import api
 from scoresplit.cache import file_sha256
-from scoresplit.models import MAX_LISTED_PAGES, MAX_PAGE_NUMBER, MAX_PARTS, Extra, Part
+from scoresplit.models import (
+    CONTROL_CHARACTERS,
+    MAX_LISTED_PAGES,
+    MAX_PAGE_NUMBER,
+    MAX_PARTS,
+    Extra,
+    Part,
+    Result,
+)
 from scoresplit.ocr import OcrUnavailableError
 
 # The tiny-PDF and page-map helpers of the exporter tests. pytest puts the
@@ -65,6 +73,21 @@ def test_inspect_refuses_an_unknown_ocr_mode(tmp_path: Path) -> None:
         api.inspect(pdf, api.InspectOptions(ocr_mode="sometimes"))
     with pytest.raises(api.BadInputError, match="workers must be 1 or more"):
         api.inspect(pdf, api.InspectOptions(workers=0))
+
+
+def test_a_language_name_brings_no_control_character_into_the_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A language that isn't installed is named in a warning, which ends up in
+    # the table and the export files. The name comes from the caller (--lang).
+    def ocr_was_used(pdf: Path, *args, **kwargs) -> Result:
+        return Result(source=pdf.name, sha256="0" * 64, page_count=1, ocr_pages=1)
+
+    monkeypatch.setattr(api, "inspect_pdf", ocr_was_used)
+    pdf = make_pdf(tmp_path / "score.pdf", 1)
+    result = api.inspect(pdf, api.InspectOptions(lang="eng+x\x1b[2J"))
+    assert any("x [2J" in warning for warning in result.warnings)
+    assert not any(CONTROL_CHARACTERS.search(warning) for warning in result.warnings)
 
 
 def test_inspect_without_tesseract_is_ocr_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

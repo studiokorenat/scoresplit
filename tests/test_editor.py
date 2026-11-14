@@ -26,7 +26,7 @@ from scoresplit.editor import (
     parse_key_field,
     parse_pages,
 )
-from scoresplit.models import Extra, Part, Result
+from scoresplit.models import CONTROL_CHARACTERS, Extra, Part, Result
 
 runner = CliRunner()
 
@@ -255,6 +255,43 @@ def test_title_composer_and_arranger(tmp_path: Path) -> None:
     editor.run()
     result = editor.result
     assert (result.title, result.composer, result.arranger) == ("Song", None, "Peter Kleine Schaars")
+
+
+def has_control_characters(text: str) -> bool:
+    """True when `text` holds a control character other than a line end."""
+    return bool(CONTROL_CHARACTERS.search(text.replace("\r\n", "").replace("\n", "")))
+
+
+def test_names_and_credits_typed_in_the_editor_are_cleaned(tmp_path: Path) -> None:
+    # The editor sets the fields directly; they are checked (and cleaned of
+    # control characters) on assignment, like when a file is loaded.
+    editor, _, console = start_editor(
+        tmp_path,
+        "e 1", "Flute\x1b[31m 1", "", "", "",  # name, then Enter for pages, key, clef
+        "t", "Song\x1b[2J", "", "",  # title, then Enter for composer and arranger
+        "q", "y",
+    )
+    editor.run()
+    assert editor.result.parts[0].name == "Flute [31m 1"
+    assert editor.result.title == "Song [2J"
+    assert not has_control_characters(console.export_text())
+
+
+def test_title_and_arranger_from_the_command_line_are_cleaned(tmp_path: Path, terminal: list[Path]) -> None:
+    pdf = make_pdf(tmp_path / "score.pdf", 6)
+    out = tmp_path / "out"
+    result = runner.invoke(
+        cli.app,
+        ["split", str(pdf), "--yes", "--title", "x\x1b[2J", "--arranger", "\x9b31mA", "--out", str(out)],
+    )
+    assert result.exit_code == cli.EXIT_OK, result.output
+    assert not has_control_characters(result.output)
+    # Not in the folder and file names, nor in the CSV.
+    assert (out / "x [2J - 31mA").is_dir()
+    assert not any(has_control_characters(str(path)) for path in out.rglob("*"))
+    csv_text = next(out.rglob("*.csv")).read_text(encoding="utf-8")
+    assert "x [2J" in csv_text
+    assert not has_control_characters(csv_text)
 
 
 def test_wrong_commands_and_part_numbers_say_what_is_wrong(tmp_path: Path) -> None:

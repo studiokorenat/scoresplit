@@ -362,10 +362,14 @@ def inspect(
 
     # The missing languages only matter if OCR was actually used.
     if result.ocr_pages and missing_lang:
-        result.warnings.append(
+        warning = (
             f"Tesseract language(s) not installed: {', '.join(missing_lang)} "
             f"(used: {usable_lang}). Arch: tesseract-data-<lang>, Ubuntu: tesseract-ocr-<lang>."
         )
+        # A new list is SET, not appended to: setting the field cleans the
+        # control characters out of it (see Part.model_config), and the
+        # language names come from the caller as they were typed.
+        result.warnings = [*result.warnings, warning]
     return result
 
 

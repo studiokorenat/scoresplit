@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from scoresplit.exporter import safe_filename
 from scoresplit.metadata import nice_case
 from scoresplit.models import (
+    CONTROL_CHARACTERS,
     MAX_LISTED_PAGES,
     MAX_PAGE_NUMBER,
     MAX_PARTS,
@@ -619,6 +620,76 @@ def test_control_characters_in_an_edits_file_are_cleaned_when_loaded() -> None:
         "Flute [31m 1", "flute", "1", "C", "Oboe"
     )
     assert part.notes == ["read on page 4"]
+
+
+# The validators used to run only when a model was BUILT: a field set later
+# (the CLI's --title, a name typed in the editor) kept its control characters.
+
+
+def test_control_characters_are_cleaned_when_a_field_is_set_later() -> None:
+    result = make_result([Part(name="Flute", pages="1")])
+    result.source = "a\x1b[2J.pdf"
+    result.title = "a\x1b[31mb"
+    result.composer = "\x9b31mSomeone"  # "\x9b" is the one-character form of "\x1b["
+    result.arranger = "A.\x00Person"
+    result.warnings = ["odd\x0ctext"]
+    assert (result.source, result.title, result.composer, result.arranger, result.warnings) == (
+        "a [2J.pdf", "a [31mb", "31mSomeone", "A. Person", ["odd text"]
+    )
+
+    part = result.parts[0]
+    part.name = "Flute\x1b[31m 1"
+    part.instrument = "flute\x7f"
+    part.number = "1\x03"
+    part.key = "C\x85"
+    part.duplicate_of = "Oboe\x1b"
+    part.notes = ["read\x1f on page 4"]
+    assert (part.name, part.instrument, part.number, part.key, part.duplicate_of, part.notes) == (
+        "Flute [31m 1", "flute", "1", "C", "Oboe", ["read on page 4"]
+    )
+
+
+def test_a_field_set_later_is_checked_like_a_loaded_one() -> None:
+    # The other side of checking every assignment: a wrong value is refused
+    # at once instead of being stored.
+    part = Part(name="Flute", pages="1")
+    with pytest.raises(ValidationError, match="clef"):
+        part.clef = "soprano"
+    assert part.clef is None
+
+
+def test_control_characters_in_a_page_text_become_spaces_too() -> None:
+    # An invalid page text is kept (check_result reports it), but cleaned:
+    # "\x1b[2J" in the error message would clear the terminal.
+    part = Part(name="Flute", pages="1\x1b[2J")
+    assert part.pages == "1 [2J"
+    report = check_result(make_result([part]))
+    assert len(report.errors) == 1
+    assert "'Flute': pages '1 [2J' can't be read" in report.errors[0]
+    assert not CONTROL_CHARACTERS.search(report.errors[0])
+    # The same for a list with something odd in it, and for extra pages.
+    assert Part(name="Flute", pages=[1, "a\x1bb"]).pages == "1,a b"
+    assert Extra(reason="cover", pages="x\x9b").pages == "x"
+    # A control character becomes a space, then the text is read as usual,
+    # so "3-<ESC>4" is the range "3- 4", tidied to "3-4". Set later, too.
+    part.pages = "3-\x1b4"
+    assert part.pages == "3-4"
+
+
+def test_extra_pages_are_still_worked_out_when_fields_are_checked_on_assignment() -> None:
+    # Checking assignments re-runs validators, so "extra" is worked out by a
+    # validator that sets nothing (setting it would start the check again,
+    # forever). Setting extra by hand keeps its reasons, worked out afresh.
+    result = make_result([Part(name="Flute", pages="2-3")], extra=[Extra(reason="cover", pages="1")])
+    assert result.extra == [Extra(reason="cover", pages="1"), Extra(reason="unassigned", pages="4-6")]
+    result.title = "Song"  # setting another field leaves the extra pages alone
+    assert result.extra == [Extra(reason="cover", pages="1"), Extra(reason="unassigned", pages="4-6")]
+    result.extra = [Extra(reason="blank", pages="1-6")]
+    assert result.extra == [Extra(reason="blank", pages="1,4-6")]
+    # A part changed in place: refresh_extra brings the extra pages up to date.
+    result.parts[0].pages = "2"
+    result.refresh_extra()
+    assert result.extra == [Extra(reason="blank", pages="1,4-6"), Extra(reason="unassigned", pages="3")]
 
 
 def test_clean_text_from_an_edits_file_is_kept_exactly() -> None:

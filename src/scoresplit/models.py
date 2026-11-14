@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 # A progress callback: a function that receives (done, total) and returns
 # nothing, e.g. progress(12, 238) = "12 of 238 pages done". Used by the page
@@ -383,17 +383,24 @@ def _tidy_pages(value: str | list[int]) -> str:
     """
     Write pages the standard way: [5, 6, 7] -> "5-7", "7,5-6" -> "5-7".
 
-    Text that isn't a valid page range is kept exactly as it is, so the
-    result can still be loaded and check_result can report the problem
-    together with all the others (instead of the first typo stopping
-    everything with one error).
+    Text that isn't a valid page range is kept as it is, so the result can
+    still be loaded and check_result can report the problem together with
+    all the others (instead of the first typo stopping everything with one
+    error).
+
+    Control characters become spaces first, as in every other text (see
+    without_control_characters): check_result puts an invalid page text into
+    its error message, and "1\\x1b[2J" there would clear the terminal. Then
+    the text is read as usual, so "3-\\x1b4" is the range "3- 4" = "3-4".
     """
+    if isinstance(value, str):
+        value = without_control_characters(value)
     try:
         return format_page_ranges(parse_page_ranges(value))
     except (ValueError, TypeError):
         # A list with something odd in it becomes "a,b,c" text.
         if isinstance(value, list):
-            return ",".join(str(page) for page in value)
+            return without_control_characters(",".join(str(page) for page in value))
         return value
 
 
@@ -403,6 +410,16 @@ class Part(BaseModel):
 
     Every field can be edited by a person (in the saved edits) or a GUI.
     """
+
+    # model_config holds settings for the whole model. validate_assignment:
+    # the validators below also run when a field is SET later, not only when
+    # the model is built. So `part.name = "Flute\x1b[31m"` (the editor, the
+    # CLI's --title) is checked and cleaned like an edits file being loaded,
+    # and a wrong value (`part.clef = "soprano"`) is refused at once.
+    # Careful: changing a LIST in place (`part.notes.append(...)`) sets no
+    # field, so nothing checks it. Assign a new list instead:
+    # `part.notes = [*part.notes, note]`.
+    model_config = ConfigDict(validate_assignment=True)
 
     # The name as printed in the PDF, cleaned up ("2. klarinet in Es",
     # "Clarinet in Bb 1"), or the recognised name ("Trumpet 1") when the
@@ -454,6 +471,8 @@ class Part(BaseModel):
 class Extra(BaseModel):
     """Pages that belong to no part, and why: the cover, blank pages, ..."""
 
+    model_config = ConfigDict(validate_assignment=True)  # see Part
+
     reason: ExtraReason
     pages: str
 
@@ -482,6 +501,8 @@ class Result(BaseModel):
     pages become extra pages by themselves. See ``extra_groups``.
     """
 
+    model_config = ConfigDict(validate_assignment=True)  # see Part
+
     schema_version: int = SCHEMA_VERSION
     source: str  # file name of the analysed PDF
     sha256: str  # fingerprint of the PDF: saved edits only apply to the same PDF
@@ -489,8 +510,8 @@ class Result(BaseModel):
     # working out the extra pages walks over every page from 1 to page_count,
     # so "page_count": 1000000000000 would hang the program. Field(ge=0,
     # le=...) means "0 <= page_count <= MAX_PAGE_NUMBER" (ge = greater or
-    # equal, le = less or equal). Pydantic checks fields BEFORE the
-    # mode="after" validator below runs, so a bad value never gets there.
+    # equal, le = less or equal). A bad value is refused before the extra
+    # pages are worked out (see _work_out_extra).
     page_count: int = Field(ge=0, le=MAX_PAGE_NUMBER)
     ocr_pages: int = 0  # how many pages were read with OCR (0 = a text PDF)
     title: str | None = None
@@ -500,7 +521,11 @@ class Result(BaseModel):
     # the list as soon as it is too long, so a file with a million parts is
     # refused without reading them all.
     parts: list[Part] = Field(default_factory=list, max_length=MAX_PARTS)
-    extra: list[Extra] = Field(default_factory=list)
+    # Worked out from page_count and parts (see _work_out_extra), so it must
+    # stay BELOW them in this list of fields. validate_default=True: worked
+    # out also when no extra is given (pydantic skips validators on default
+    # values otherwise).
+    extra: list[Extra] = Field(default_factory=list, validate_default=True)
     warnings: list[str] = Field(default_factory=list)  # about the whole PDF
 
     # mode="before" runs on the raw data, BEFORE pydantic builds a Part or
@@ -536,54 +561,44 @@ class Result(BaseModel):
     def _remove_control_characters(cls, value: str | list[str] | None) -> str | list[str] | None:
         return _clean_text(value)
 
-    # mode="after" runs once the whole model is built: the moment to bring
-    # the worked-out extra pages up to date with the (maybe edited) parts.
-    @model_validator(mode="after")
-    def _work_out_extra(self) -> Result:
-        self.refresh_extra()
-        return self
+    # The extra pages are worked out each time "extra" is set: when the
+    # result is built or loaded, and by refresh_extra.
+    #
+    # Why a validator on the FIELD, which returns the value, and not one on
+    # the whole model that sets self.extra: with validate_assignment, setting
+    # self.extra inside a validator runs the validators again, which set it
+    # again ... forever (tried: it never stopped, already when building).
+    #
+    # info.data holds the fields above "extra" that were checked already. A
+    # field that failed is missing from it: pydantic reports that mistake,
+    # and there is nothing to work out.
+    @field_validator("extra", mode="after")
+    @classmethod
+    def _work_out_extra(cls, extra: list[Extra], info: ValidationInfo) -> list[Extra]:
+        if "parts" not in info.data or "page_count" not in info.data:
+            return extra
+        return _extra_groups(info.data["parts"], extra, info.data["page_count"])
 
     def extra_groups(self, page_count: int | None = None) -> list[Extra]:
         """
-        Every page that is in no part, grouped by reason, in page order:
-
-            parts on pages 2-9, detection said page 1 is the cover, 10 blank
-            -> [Extra(reason="cover", pages="1"), Extra(reason="blank", pages="10")]
-
-        The reasons are taken from the current ``extra`` list (what detection
-        said about each page); a page it doesn't mention is "unassigned". A
-        page that is in a part again is no extra page any more.
+        Every page that is in no part, grouped by reason (see _extra_groups).
 
         ``page_count`` defaults to the result's own; split passes the real
         number of pages of the PDF it cuts.
         """
         if page_count is None:
             page_count = self.page_count
-
-        # Which reason detection gave each page: {1: "cover", 10: "blank"}.
-        reasons: dict[int, str] = {}
-        for extra in self.extra:
-            for page in _pages_or_nothing(extra.pages):
-                reasons[page] = extra.reason
-
-        # Every page that some part uses (also parts that aren't exported:
-        # a duplicate's pages are shown in the table, not in extra/).
-        in_a_part: set[int] = set()
-        for part in self.parts:
-            in_a_part.update(_pages_or_nothing(part.pages))
-
-        # Group the left-over pages by reason. A dict keeps the order in
-        # which keys are added, so the groups come in order of their first page.
-        by_reason: dict[str, list[int]] = {}
-        for page in range(1, page_count + 1):
-            if page not in in_a_part:
-                reason = reasons.get(page, "unassigned")
-                by_reason.setdefault(reason, []).append(page)
-        return [Extra(reason=reason, pages=pages) for reason, pages in by_reason.items()]
+        return _extra_groups(self.parts, self.extra, page_count)
 
     def refresh_extra(self) -> None:
-        """Bring ``extra`` up to date after the parts changed (see extra_groups)."""
-        self.extra = self.extra_groups()
+        """
+        Bring ``extra`` up to date after the parts changed in place (an edit
+        to ``part.pages``, a part added to or removed from the list): those
+        don't set "extra", so they don't work it out by themselves.
+        """
+        # Setting the field runs _work_out_extra, which works the groups
+        # out from the current parts.
+        self.extra = self.extra
 
     def folder_name(self) -> str:
         """
@@ -615,6 +630,40 @@ def _total_listed_pages(items: object) -> int:
         pages = item.get("pages") if isinstance(item, dict) else getattr(item, "pages", None)
         total += count_listed_pages(pages)
     return total
+
+
+def _extra_groups(parts: list[Part], extra: list[Extra], page_count: int) -> list[Extra]:
+    """
+    Every page from 1 to page_count that is in none of the ``parts``,
+    grouped by reason, in page order:
+
+        parts on pages 2-9, detection said page 1 is the cover, 10 blank
+        -> [Extra(reason="cover", pages="1"), Extra(reason="blank", pages="10")]
+
+    The reasons are taken from ``extra`` (what detection said about each
+    page); a page it doesn't mention is "unassigned". A page that is in a
+    part again is no extra page any more.
+    """
+    # Which reason detection gave each page: {1: "cover", 10: "blank"}.
+    reasons: dict[int, str] = {}
+    for group in extra:
+        for page in _pages_or_nothing(group.pages):
+            reasons[page] = group.reason
+
+    # Every page that some part uses (also parts that aren't exported:
+    # a duplicate's pages are shown in the table, not in extra/).
+    in_a_part: set[int] = set()
+    for part in parts:
+        in_a_part.update(_pages_or_nothing(part.pages))
+
+    # Group the left-over pages by reason. A dict keeps the order in
+    # which keys are added, so the groups come in order of their first page.
+    by_reason: dict[str, list[int]] = {}
+    for page in range(1, page_count + 1):
+        if page not in in_a_part:
+            reason = reasons.get(page, "unassigned")
+            by_reason.setdefault(reason, []).append(page)
+    return [Extra(reason=reason, pages=pages) for reason, pages in by_reason.items()]
 
 
 def _pages_or_nothing(pages: str) -> list[int]:
