@@ -3,6 +3,18 @@
 Split a sheet-music PDF (a conductor score and every part in one file) into
 **one PDF per instrument part**.
 
+> [!NOTE]
+> **Early version (0.x).** scoresplit works on real scores, but it is still young:
+>
+> - **Check the parts before you print or share them.** Detection is right most
+>   of the time, not always: look at the table and fix what's wrong in the
+>   editor. Your original PDF is never changed.
+> - **File formats can still change** between 0.x versions (the result JSON,
+>   the CSV columns). Every such change is listed under "Breaking" in
+>   [CHANGELOG.md](CHANGELOG.md).
+> - Found a wrong part or a crash?
+>   [Open an issue](https://github.com/studiokorenat/scoresplit/issues).
+
 scoresplit reads every page and works out:
 
 - the **title, composer and arranger**,
