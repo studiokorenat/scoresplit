@@ -193,7 +193,7 @@ def _keyword_contradicted(facts: PageFacts, margin_parts: list[PartName]) -> boo
     Safety net for a score keyword in the wrong place: is everything ELSE on
     the page saying "this is a part"? That is:
 
-      * the header has a clear part name ("1 Clarinet in Bb"),
+      * the name lines have a clear part name ("1 Clarinet in Bb"),
       * the margin names no instrument at all (a score labels its staves),
       * and the page isn't crowded with staves like a score.
 
@@ -203,7 +203,9 @@ def _keyword_contradicted(facts: PageFacts, margin_parts: list[PartName]) -> boo
     """
     if margin_parts or facts.staff_count >= SCORE_MANY_STAVES:
         return False
-    found = best_header_part(facts.header)
+    # Only a name where names are printed counts: a cue inside the music
+    # ("Clarinet in Bb 1" low in a tall header) says nothing about the page.
+    found = best_header_part(name_lines(facts.header))
     return found is not None and found[0].score >= CLEAR_PART_NAME_MIN_SCORE
 
 
@@ -464,7 +466,7 @@ def _set_aside_unlisted_key(part: PartName) -> None:
 PART_NAME_MAX_Y = 0.15
 
 
-def _name_lines(facts: PageFacts) -> list[TextSpan]:
+def name_lines(header: list[TextSpan]) -> list[TextSpan]:
     """
     The header lines that may hold the page's part name: those starting in
     the top PART_NAME_MAX_Y of the page.
@@ -473,10 +475,14 @@ def _name_lines(facts: PageFacts) -> list[TextSpan]:
     is a first page, and a tall title block (a big logo) can push the name
     lower. A page without a header gets no name at all, and so continues
     the part before it.
+
+    Every place that asks "does this page print a part name?" uses this
+    rule: classify_page, _keyword_contradicted, and page_analyzer when it
+    decides whether to read the header again.
     """
-    if has_credits(facts.header):
-        return facts.header
-    return [span for span in facts.header if span.y0 < PART_NAME_MAX_Y]
+    if has_credits(header):
+        return header
+    return [span for span in header if span.y0 < PART_NAME_MAX_Y]
 
 
 def classify_page(facts: PageFacts) -> PageInfo:
@@ -526,8 +532,8 @@ def classify_page(facts: PageFacts) -> PageInfo:
         return info
 
     # 4) Instrument part. Its name comes from the TOP of the page only (see
-    #    _name_lines): a word lower down is inside the music.
-    found = best_header_part(_name_lines(facts))
+    #    name_lines): a word lower down is inside the music.
+    found = best_header_part(name_lines(facts.header))
     part_span = found[1] if found else None
     info.is_start = has_credits(facts.header) or _is_title_size(facts, part_span)
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
 
@@ -225,3 +226,104 @@ def test_a_scanned_page_is_one_big_picture(tmp_path: Path) -> None:
     logo = _pdf_with_picture(tmp_path, 100, 50)  # a logo on an exported page
     assert largest_image_share(logo[0]) < SCANNED_PAGE_MIN_IMAGE_SHARE
     assert largest_image_share(_blank_pdf(tmp_path)[0]) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# The header retry looks at the name lines only (review step 23)
+#
+# On a scan whose first staff starts low, the header strip reaches into the
+# music. A cue OCR'd there ("Triangel") is no part name (classify reads names
+# only from the top 15%), so it must not stop the sharper second reading of
+# the header that looks for the real name.
+# ---------------------------------------------------------------------------
+
+
+def _scan_page_reading(monkeypatch, header: list[TextSpan]) -> list[int]:
+    """
+    Analyse a fake scanned page whose first staff starts at 30% of the page
+    and whose header OCR reads `header`. Returns the psm of every ocr_image
+    call (the retry is the psm 6 one).
+    """
+    gray = np.full((842, 595), 255, dtype=np.uint8)
+    gray[300:400, 50:550] = 0  # ink, so the page isn't blank
+    staff = [(253.0 + 8 * line, 0, 595) for line in range(5)]  # first line at y = 0.30
+    monkeypatch.setattr(page_analyzer, "render_page_gray", lambda page, dpi: gray)
+    monkeypatch.setattr(page_analyzer, "deskew", lambda picture: picture)
+    monkeypatch.setattr(page_analyzer, "find_staves_on_page", lambda picture: ([staff], 128))
+    monkeypatch.setattr(page_analyzer, "detect_clef", lambda *args: None)
+    monkeypatch.setattr(page_analyzer, "find_text_boxes", lambda *args: [])
+    monkeypatch.setattr(page_analyzer, "find_text_lines", lambda *args: [])
+    monkeypatch.setattr(page_analyzer, "render_region_gray", lambda *args: gray[:126])
+    monkeypatch.setattr(
+        page_analyzer,
+        "ocr_region",
+        lambda picture, region, dpi, psm, lang: header if region[1] == 0.0 else [],
+    )
+    psms: list[int] = []
+
+    def fake_ocr_image(picture, region, dpi, psm, lang):
+        psms.append(psm)
+        return []
+
+    monkeypatch.setattr(page_analyzer, "ocr_image", fake_ocr_image)
+    return psms
+
+
+def test_a_cue_low_in_the_header_still_gets_the_header_retry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cue = _span("Triangel", y0=0.25)
+    psms = _scan_page_reading(monkeypatch, [cue])
+    settings = AnalysisSettings(ocr_mode="always", ocr_available=True)
+    facts = analyze_page(_blank_pdf(tmp_path), 1, settings)
+    assert facts.header[0].text == "Triangel"  # the fake OCR was used
+    assert psms == [6]  # ... and the retry ran
+
+
+def test_a_name_at_the_top_needs_no_header_retry(tmp_path: Path, monkeypatch) -> None:
+    psms = _scan_page_reading(monkeypatch, [_span("Flute 1", y0=0.03)])
+    settings = AnalysisSettings(ocr_mode="always", ocr_available=True)
+    analyze_page(_blank_pdf(tmp_path), 1, settings)
+    assert psms == []
+
+
+# ---------------------------------------------------------------------------
+# Only pages with ink are turned to look for sideways music (review step 24)
+#
+# Turning a page costs a full-size copy and another staff search. A blank
+# page can't hold sideways staves (three staves of five lines are far more
+# ink than BLANK_INK_RATIO allows), so it isn't turned.
+# ---------------------------------------------------------------------------
+
+
+def _count_staff_searches(monkeypatch, gray: np.ndarray | None = None) -> list[int]:
+    """Count the staff searches; with `gray`, the page renders as that picture."""
+    calls: list[int] = []
+    real_search = page_analyzer.find_staves_on_page
+
+    def counting_search(picture):
+        calls.append(1)
+        return ([], 128) if gray is not None else real_search(picture)
+
+    monkeypatch.setattr(page_analyzer, "find_staves_on_page", counting_search)
+    if gray is not None:
+        monkeypatch.setattr(page_analyzer, "render_page_gray", lambda page, dpi: gray)
+        monkeypatch.setattr(page_analyzer, "deskew", lambda picture: picture)
+    return calls
+
+
+def test_a_blank_page_is_not_turned(tmp_path: Path, monkeypatch) -> None:
+    # Both ways a page is read: as a scan ("auto", no text) and as text.
+    for mode in ("auto", "never"):
+        calls = _count_staff_searches(monkeypatch)
+        facts = analyze_page(_blank_pdf(tmp_path), 1, AnalysisSettings(ocr_mode=mode))
+        assert len(calls) == 1  # upright only
+        assert facts.sideways_staff_count == 0
+
+
+def test_a_page_with_ink_and_no_staves_is_still_turned(tmp_path: Path, monkeypatch) -> None:
+    gray = np.full((842, 595), 255, dtype=np.uint8)
+    gray[100:500, 100:300] = 0  # ink, but no upright staves
+    calls = _count_staff_searches(monkeypatch, gray)
+    analyze_page(_blank_pdf(tmp_path), 1, AnalysisSettings(ocr_mode="never"))
+    assert len(calls) == 2  # upright, then turned

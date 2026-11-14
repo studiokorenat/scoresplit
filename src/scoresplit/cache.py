@@ -53,7 +53,9 @@ from .models import PageFacts, TextSpan
 #     is measured, not missed (Buffalo Dances pages 41 and 104).
 # 23: pages without staves are also measured turned by 90 degrees
 #     (PageFacts.sideways_staff_count): Tullamore page 100 is printed sideways.
-ANALYSIS_VERSION = 23
+# 24: a cue low in a scan's header (inside the music) no longer stops the
+#     second, sharper reading of the header (review step 23).
+ANALYSIS_VERSION = 24
 
 
 def file_sha256(path: Path) -> str:

@@ -40,7 +40,7 @@ import numpy as np
 import pypdfium2 as pdfium
 
 from . import cache
-from .classify import has_credits
+from .classify import has_credits, name_lines
 from .image_analysis import (
     BLANK_INK_RATIO,
     deskew,
@@ -158,8 +158,14 @@ def header_bottom(first_staff_y: float | None) -> float:
     return min(HEADER_MAX_BOTTOM, max(HEADER_MIN_BOTTOM, first_staff_y - 0.005))
 
 
-def _has_part_name(spans: list[TextSpan]) -> bool:
-    return any(find_part_name(span.text) for span in spans)
+def _has_part_name(header: list[TextSpan]) -> bool:
+    """
+    Does the header print a part name where names are printed (the name
+    lines, see classify.name_lines)? A cue lower down, inside the music,
+    doesn't count: classify ignores it, so it mustn't stop the second
+    reading of the header that looks for the real name either.
+    """
+    return any(find_part_name(span.text) for span in name_lines(header))
 
 
 def find_stamp_texts(pages: list[list[TextSpan]]) -> frozenset[str]:
@@ -375,7 +381,12 @@ def analyze_page(
     # is turned doesn't matter: a staff is 5 lines either way.)
     # np.ascontiguousarray makes a real copy of the turned picture, laid out
     # row by row in memory, as the other image functions expect.
-    if not staves:
+    # A blank page is not turned: three staves of five lines are far more
+    # ink than BLANK_INK_RATIO, so it can't hold sideways music, and the
+    # turned copy and second search would be wasted. (Pages of text are
+    # still turned: classify checks for sideways music BEFORE it checks for
+    # prose, and the search costs only ~0.01 s a page.)
+    if not staves and facts.ink_ratio >= BLANK_INK_RATIO:
         turned = np.ascontiguousarray(np.rot90(gray))
         facts.sideways_staff_count = len(find_staves_on_page(turned)[0])
     header_region = (0.0, 0.0, 1.0, header_bottom(first_staff_y))

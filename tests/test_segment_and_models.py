@@ -912,7 +912,7 @@ def facts_page(number: int, name: str | None = None, sideways: bool = False) -> 
     """
     if sideways:
         return PageFacts(page_number=number, source="ocr", ink_ratio=0.05, sideways_staff_count=12)
-    # A name sits in the top strip of the page (y0 = 0.03, see classify._name_lines).
+    # A name sits in the top strip of the page (y0 = 0.03, see classify.name_lines).
     header = [TextSpan(name, 0.05, 0.03, 0.25, 0.05, 11)] if name else []
     return PageFacts(
         page_number=number, source="ocr", ink_ratio=0.08, staff_count=10, header=header

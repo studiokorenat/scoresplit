@@ -700,3 +700,36 @@ def test_music_printed_sideways_is_marked_but_a_back_cover_is_not() -> None:
         PageFacts(page_number=5, source="ocr", ink_ratio=0.05, staff_count=9, sideways_staff_count=4)
     )
     assert not upright.sideways
+
+
+# ---------------------------------------------------------------------------
+# A cue inside the music doesn't contradict a score keyword (review step 23)
+#
+# Only the name lines (the top 15% of the page, or the whole header of a
+# page with credits) can hold a part name, so only those can outvote a
+# "Score" printed in the header.
+# ---------------------------------------------------------------------------
+
+
+def _score_page_with(name: TextSpan) -> PageFacts:
+    return PageFacts(
+        page_number=1,
+        source="ocr",
+        staff_count=8,
+        ink_ratio=0.08,
+        header=[TextSpan("Conductor Score", x0=0.4, y0=0.03, x1=0.6, y1=0.05, size=14), name],
+    )
+
+
+def test_a_cue_inside_the_music_does_not_contradict_a_score_keyword() -> None:
+    # The header reached down into the music (no staves found up there) and
+    # holds a clear part name as a cue, at y = 0.25.
+    cue = TextSpan("Clarinet in Bb 1", x0=0.6, y0=0.25, x1=0.75, y1=0.26, size=9)
+    assert classify_page(_score_page_with(cue)).kind == "score"
+
+
+def test_a_part_name_at_the_top_still_contradicts_a_score_keyword() -> None:
+    # The same name in the name lines: the page is that part, as before.
+    name = TextSpan("Clarinet in Bb 1", x0=0.05, y0=0.06, x1=0.2, y1=0.08, size=12)
+    info = classify_page(_score_page_with(name))
+    assert (info.kind, info.part.instrument_id) == ("part", "clarinet")
