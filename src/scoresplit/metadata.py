@@ -70,14 +70,14 @@ UNLABELLED_COMPOSER_MIN_X = 0.55
 UNLABELLED_COMPOSER_LEFT_MAX_X = 0.45
 
 # An unlabelled name found only on the left side must be seen on at least
-# this many pages (in vote weight), so one stray word pair isn't taken as
-# the composer.
-LEFT_COMPOSER_MIN_VOTES = 2
+# this many PAGES (not vote weight: one text page weighs TEXT_VOTE_WEIGHT
+# but is still one page), so one stray word pair isn't taken as the composer.
+LEFT_COMPOSER_MIN_PAGES = 2
 
 # OCR often drops accents ("POKLEPOVIĆ" -> "POKLEPOVIC") but rarely adds
-# them. So when both spellings were seen, the accented one wins if it got at
-# least this much vote weight (i.e. it was read on 2+ pages).
-ACCENTED_SPELLING_MIN_VOTES = 2
+# them. So when both spellings were seen, the accented one wins if it was
+# read on at least this many PAGES (not vote weight, as above).
+ACCENTED_SPELLING_MIN_PAGES = 2
 
 
 def nice_case(text: str) -> str:
@@ -270,20 +270,24 @@ def _vote(votes: list[tuple[str, int]], min_pages: int = 1) -> str | None:
     if pages[winner_key] < min_pages:
         return None
 
-    spellings: Counter = Counter()
+    spellings: Counter = Counter()  # exact spelling -> total weight
+    spelling_pages: Counter = Counter()  # exact spelling -> number of pages
     for value, weight in votes:
         if _loose(value) == winner_key:
             spellings[value] += weight
+            spelling_pages[value] += 1
     # OCR drops accents more often than it adds them, so an accented spelling
     # read on several pages beats a more frequent plain one:
     # "POKLEPOVIĆ" (6 pages) beats "POKLEPOVIC" (29 pages).
+    # "Several" means PAGES, like min_pages above: one text page weighs 3
+    # but is still one page.
     accented = [
-        (value, weight)
-        for value, weight in spellings.most_common()
-        if _accent_count(value) > 0 and weight >= ACCENTED_SPELLING_MIN_VOTES
+        value
+        for value, _weight in spellings.most_common()
+        if _accent_count(value) > 0 and spelling_pages[value] >= ACCENTED_SPELLING_MIN_PAGES
     ]
     if accented:
-        return accented[0][0]
+        return accented[0]
     return spellings.most_common(1)[0][0]
 
 
@@ -433,9 +437,10 @@ def extract_metadata(
     # Unlabelled names from both sides vote together (one per page, the right
     # side preferred), so a stray right-side fragment on ONE page can't beat
     # a name printed on the left of every page. Left-side names count only
-    # when seen on a few pages (see LEFT_COMPOSER_MIN_VOTES).
+    # when seen on a few pages (see LEFT_COMPOSER_MIN_PAGES). Each page adds
+    # at most one left name, so the number of votes IS the number of pages.
     unlabelled = list(votes.right_names)
-    if sum(weight for _, weight in votes.left_names) >= LEFT_COMPOSER_MIN_VOTES:
+    if len(votes.left_names) >= LEFT_COMPOSER_MIN_PAGES:
         unlabelled += votes.left_names
     composer = _vote(votes.composers, min_pages) or _vote(unlabelled, min_pages)
     arranger = _vote(votes.arrangers, min_pages)

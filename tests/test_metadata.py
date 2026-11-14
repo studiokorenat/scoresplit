@@ -12,11 +12,13 @@ from scoresplit.models import PageFacts, TextSpan
 from scoresplit.pdf_reader import tidy_text
 
 
-def march_card(number: int, part: str, composer: str = "MARKO POKLEPOVIC") -> PageFacts:
-    """Helper: the OCR'd header of one march card page."""
+def march_card(
+    number: int, part: str, composer: str = "MARKO POKLEPOVIC", source: str = "ocr"
+) -> PageFacts:
+    """Helper: the header of one march card page (OCR'd unless `source` says "text")."""
     return PageFacts(
         page_number=number,
-        source="ocr",
+        source=source,
         staff_count=9,
         header=[
             TextSpan(composer, x0=0.08, y0=0.04, x1=0.24, y1=0.06, size=9),
@@ -228,3 +230,43 @@ def test_title_printed_on_the_music_pages_beats_a_cover_series_label() -> None:
     ]
     infos = [classify_page(page) for page in facts]
     assert extract_metadata(facts, infos)["title"] == "Lord Tullamore"
+
+
+# --- Review step 20: the left-side and accent minimums count pages too -------
+# A text page weighs TEXT_VOTE_WEIGHT (3) in a vote, but it is still ONE
+# page, so it must not pass a "seen on 2 pages" minimum by itself.
+
+
+def test_a_left_side_name_on_one_text_page_is_not_the_composer() -> None:
+    # A stray word pair on the left of one cover ("Grade Three") must not
+    # become the composer just because the page has a text layer.
+    facts = [march_card(1, "Piccolo", "GRADE THREE", source="text")]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["composer"] is None
+
+
+def test_a_left_side_name_on_two_text_pages_is_the_composer() -> None:
+    facts = [
+        march_card(1, "Piccolo", "GRADE THREE", source="text"),
+        march_card(2, "Flute", "GRADE THREE", source="text"),
+    ]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["composer"] == "Grade Three"
+
+
+def test_an_accented_spelling_on_one_text_page_does_not_win() -> None:
+    # The plain spelling was read on 3 pages, the accented one on 1 text
+    # page (weight 3, but one page): the accent rule wants 2 PAGES.
+    # (All text pages: a text march card with a big title is a start page,
+    # an OCR one isn't, so mixing them would change which pages are read.)
+    facts = [march_card(n, "Oboe", "MARKO POKLEPOVIC", source="text") for n in (1, 2, 3)]
+    facts.append(march_card(4, "Oboe", "MARKO POKLEPOVIĆ", source="text"))
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["composer"] == "Marko Poklepovic"
+
+
+def test_an_accented_spelling_on_two_text_pages_wins() -> None:
+    facts = [march_card(n, "Oboe", "MARKO POKLEPOVIC", source="text") for n in (1, 2, 3)]
+    facts += [march_card(n, "Oboe", "MARKO POKLEPOVIĆ", source="text") for n in (4, 5)]
+    infos = [classify_page(page) for page in facts]
+    assert extract_metadata(facts, infos)["composer"] == "Marko Poklepović"
