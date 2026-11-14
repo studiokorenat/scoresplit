@@ -26,21 +26,23 @@ scoresplit reads every page and works out:
 It shows all of that in a table, lets you correct it, and then writes the
 files:
 
+![scoresplit in the terminal: the score's title, composer and arranger, a table of 51 detected parts with name, instrument, key, clef, pages and confidence, and the editor commands below it](assets/screenshot.png)
+
 ```
-Nuovo Cinema Paradiso - Peter Kleine Schaars/
-    01_Nuovo_Cinema_Paradiso_Peter_Kleine_Schaars_Conductor_Score_pages_3-47.pdf
-    02_Nuovo_Cinema_Paradiso_Peter_Kleine_Schaars_Piccolo_C_tc_pages_48-50.pdf
+Example Music Score - Jane Doe/
+    01_Example_Music_Score_Jane_Doe_Conductor_Score_pages_3-47.pdf
+    02_Example_Music_Score_Jane_Doe_Piccolo_C_tc_pages_48-50.pdf
     ...
-    11_Nuovo_Cinema_Paradiso_Peter_Kleine_Schaars_Clarinet_1_in_Bb_tc_pages_82-85.pdf
+    11_Example_Music_Score_Jane_Doe_Clarinet_1_in_Bb_tc_pages_82-85.pdf
     ...
-    51_Nuovo_Cinema_Paradiso_Peter_Kleine_Schaars_Timpani_bc_pages_237-238.pdf
+    51_Example_Music_Score_Jane_Doe_Timpani_bc_pages_237-238.pdf
     extra/
         cover_pages_1-2.pdf
     export/
-        Nuovo Cinema Paradiso - Peter Kleine Schaars.json
-        Nuovo Cinema Paradiso - Peter Kleine Schaars.csv
-        Nuovo Cinema Paradiso - Peter Kleine Schaars.xml
-        paradiso.pdf
+        Example Music Score - Jane Doe.json
+        Example Music Score - Jane Doe.csv
+        Example Music Score - Jane Doe.xml
+        example_music_score.pdf
 ```
 
 It works with both kinds of PDF:
@@ -149,13 +151,13 @@ scoresplit "my score.pdf"
 then shows what it found:
 
 ```
-╭────────────────────────────── scoresplit ──────────────────────────────╮
-│ Nuovo Cinema Paradiso                                                  │
-│ Composer: Ennio Morricone                                              │
-│ Arranger: Peter Kleine Schaars                                         │
-│ Source:   paradiso.pdf (238 pages, scanned, 238 page(s) read with OCR) │
-│ Folder:   Nuovo Cinema Paradiso - Peter Kleine Schaars/                │
-╰────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────── scoresplit ────────────────────────────────────╮
+│ Example Music Score                                                               │
+│ Composer: John Doe                                                                │
+│ Arranger: Jane Doe                                                                │
+│ Source:   example_music_score.pdf (238 pages, scanned, 238 page(s) read with OCR) │
+│ Folder:   Example Music Score - Jane Doe/                                         │
+╰───────────────────────────────────────────────────────────────────────────────────╯
 
   #  Name                 Instrument          Key  Clef       Pages  Conf.
  ──────────────────────────────────────────────────────────────────────────
@@ -170,6 +172,7 @@ Notes
   15: page(s) 101 had no readable name and were added to this part
 Extra pages: cover 1-2  (-> extra/)
 * = key not printed, the usual key is assumed
+51 PDF(s) will be created.
 ```
 
 How to read it:
@@ -218,7 +221,7 @@ named `<Title> - <Arranger>` (the composer when there is no arranger):
 
 - **One PDF per part.** The file name is the row number, the title, the
   arranger, the part name, the key, the clef (`tc` treble, `bc` bass) and the
-  pages: `11_Nuovo_Cinema_Paradiso_Peter_Kleine_Schaars_Clarinet_1_in_Bb_tc_pages_82-85.pdf`.
+  pages: `11_Example_Music_Score_Jane_Doe_Clarinet_1_in_Bb_tc_pages_82-85.pdf`.
   The key is left out when the name already contains it, or the part has no
   key (score, drums, piano).
 - **`extra/`**: the pages that are in no part, named by their reason:
@@ -348,16 +351,16 @@ The rules:
 ```jsonc
 {
   "status": "ok",
-  "output_dir": "/tmp/job-123/Nuovo Cinema Paradiso - Peter Kleine Schaars",
+  "output_dir": "/tmp/job-123/Example Music Score - Jane Doe",
   "warnings": [],            // e.g. "'Flute 1' and 'Flute 2' share page(s) 27"
   "files": [
     {
       "part": 0,             // index in result.parts; null for extra pages and export files
-      "file": "/tmp/job-123/Nuovo Cinema Paradiso - .../01_..._Conductor_Score_pages_3-47.pdf",
+      "file": "/tmp/job-123/Example Music Score - .../01_..._Conductor_Score_pages_3-47.pdf",
       "relative_path": "01_..._Conductor_Score_pages_3-47.pdf"   // to output_dir, always "/"
     },
     {"part": null, "file": "...", "relative_path": "extra/cover_pages_1-2.pdf"},
-    {"part": null, "file": "...", "relative_path": "export/Nuovo Cinema Paradiso - Peter Kleine Schaars.json"}
+    {"part": null, "file": "...", "relative_path": "export/Example Music Score - Jane Doe.json"}
   ],
   "result": { ... the result that was split ... }
 }
@@ -414,13 +417,13 @@ editor saves, what `--edits` reads, and the JSON file in `export/`.
 ```jsonc
 {
   "schema_version": 4,
-  "source": "paradiso.pdf",
+  "source": "example_music_score.pdf",
   "sha256": "6087…",          // fingerprint: edits only apply to the same PDF
   "page_count": 238,
   "ocr_pages": 238,           // 0 = a text PDF
-  "title": "Nuovo Cinema Paradiso",
-  "composer": "Ennio Morricone",
-  "arranger": "Peter Kleine Schaars",
+  "title": "Example Music Score",
+  "composer": "John Doe",
+  "arranger": "Jane Doe",
   "parts": [
     {
       "name": "Clarinet 1 in Bb",   // as printed; also the file name
