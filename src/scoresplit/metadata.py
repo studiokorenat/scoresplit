@@ -387,14 +387,19 @@ def _confirm_titles(facts: list[PageFacts], votes: _Votes, voted: set[int]) -> N
     """
     candidates: dict[str, str] = {}  # loose key -> one spelling of it
     for value, _weight in votes.titles:
-        candidates.setdefault(_loose(value), value)
+        key = _loose(value)
+        # A candidate of symbols only ("* * *") has the key "", which every
+        # dash or ornament line in a header has too: it must match nothing.
+        if key:
+            candidates.setdefault(key, value)
     if not candidates:
         return
     for page_facts in facts:
         if page_facts.page_number in voted or page_facts.staff_count == 0:
             continue  # this page voted already; a page without music isn't one
         # A set: a title printed twice on one page still counts once.
-        printed = {_loose(span.text.strip(" -–:,|")) for span in page_facts.header}
+        # (_loose already drops the dashes and colons around a line.)
+        printed = {_loose(span.text) for span in page_facts.header}
         for key, spelling in candidates.items():
             if key in printed:
                 votes.titles.append((spelling, 1))

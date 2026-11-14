@@ -270,3 +270,26 @@ def test_an_accented_spelling_on_two_text_pages_wins() -> None:
     facts += [march_card(n, "Oboe", "MARKO POKLEPOVIĆ", source="text") for n in (4, 5)]
     infos = [classify_page(page) for page in facts]
     assert extract_metadata(facts, infos)["composer"] == "Marko Poklepović"
+
+
+# --- Review step 25: an empty title key never matches -------------------------
+# A title candidate made only of symbols has the loose key "" (_loose drops
+# every non-word character), and so does every dash or ornament line in a
+# header. Such a candidate must not get a vote from each of those pages.
+# (_title_candidate keeps only text with 4+ letters, so today no such
+# candidate is made; this guards _confirm_titles on its own.)
+
+
+def test_a_symbol_only_title_gets_no_votes_from_ornament_lines() -> None:
+    from scoresplit.metadata import _confirm_titles, _Votes
+
+    facts = []
+    for number in (3, 4, 5):
+        page = _tullamore_part_page(number, "Flute")
+        page.header.append(TextSpan("— — —", x0=0.3, y0=0.1, x1=0.6, y1=0.11, size=10))
+        facts.append(page)
+    votes = _Votes(titles=[("* * *", 1), ("LORD TULLAMORE", 1)])
+    _confirm_titles(facts, votes, voted=set())
+    # The real title gets a vote from each music page; the symbols get none.
+    assert votes.titles.count(("* * *", 1)) == 1
+    assert votes.titles.count(("LORD TULLAMORE", 1)) == 4
