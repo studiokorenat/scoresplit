@@ -52,6 +52,7 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 
+from .cache import file_sha256
 from .instruments import find_part_name
 from .models import (
     CheckReport,
@@ -639,6 +640,39 @@ def folder_in_use(folder: Path) -> bool:
     return folder.is_dir() and any(folder.iterdir())
 
 
+def _describe_pdf_split(result: Result, pdf_path: Path, page_count: int) -> Result:
+    """
+    A copy of `result` that names the PDF really split: its file name,
+    sha256 and page count. The caller's result stays as it was.
+
+    An edits file loaded with force=True may come from another PDF. Without
+    this, the export JSON would name the other PDF (so loading it back with
+    --edits on THIS PDF would be refused without --force again), and give
+    the other PDF's page count (so the extra pages worked out on loading
+    would differ from the ones written).
+
+    When the sha256 differs (really another PDF, not just a renamed copy) a
+    warning keeps that history visible: the extra pages' reasons (cover,
+    blank) came from the other PDF's detection, not from this one.
+    """
+    real_sha256 = file_sha256(pdf_path)  # one more read of the file: fast
+    # model_copy() = a copy; the new lists below replace the copy's, so the
+    # caller's lists are never changed. Assigning a field runs its
+    # validators (validate_assignment), so the file name is cleaned like a
+    # loaded one.
+    described = result.model_copy()
+    if result.sha256 != real_sha256:
+        described.warnings = [
+            *result.warnings,
+            f"split with edits made for another PDF ({result.source}): "
+            "the reasons of the extra pages (cover, blank) come from that PDF",
+        ]
+    described.source = pdf_path.name
+    described.sha256 = real_sha256
+    described.page_count = page_count
+    return described
+
+
 def export_parts(
     result: Result,
     pdf_path: Path,
@@ -684,15 +718,8 @@ def export_parts(
         if folder_in_use(target) and not force:
             raise OutputExistsError(str(target))
 
-        # The export files describe the PDF really split. An edits file
-        # loaded with force=True may come from another PDF with a different
-        # page count; without this the JSON would list the extra pages of
-        # THIS PDF but the page_count of the other one, and loading it back
-        # with --edits would quietly work out other extra pages.
-        # model_copy(update=...) = a copy with that field changed; the
-        # caller's result stays as it was.
-        if result.page_count != len(source):
-            result = result.model_copy(update={"page_count": len(source)})
+        # The export files describe the PDF really split.
+        result = _describe_pdf_split(result, pdf_path, len(source))
 
         # Decide every file first, so the total is known before writing:
         # a progress bar needs "of how many" from the start.

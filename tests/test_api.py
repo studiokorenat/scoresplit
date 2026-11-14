@@ -152,6 +152,26 @@ def test_load_edits_for_another_pdf_is_bad_input(tmp_path: Path) -> None:
     assert api.load_edits(map_file, pdf, force=True).parts[0].name == "Flute"
 
 
+def test_an_export_made_with_force_loads_back_without_force(tmp_path: Path) -> None:
+    # Review step 21: split a.pdf with edits made for another PDF (--force).
+    # The export JSON then describes a.pdf, so loading it back as edits on
+    # a.pdf needs no --force; the warning says where the edits came from.
+    pdf = make_pdf(tmp_path / "a.pdf", 2)
+    map_file = tmp_path / "map.json"
+    page_map = make_map([Part(name="Flute", pages="1")], page_count=2)  # for test.pdf
+    page_map.title = "Song"
+    api.save_edits(page_map, map_file)
+
+    loaded = api.load_edits(map_file, pdf, force=True)
+    result = api.split(pdf, loaded, tmp_path / "out")
+    export_json = result.output_dir / "export" / "Song.json"
+
+    again = api.load_edits(export_json, pdf)  # no force
+    assert (again.source, again.sha256) == ("a.pdf", file_sha256(pdf))
+    assert any("edits made for another PDF (test.pdf)" in warning for warning in again.warnings)
+    assert again.parts[0].name == "Flute"
+
+
 def test_load_edits_with_broken_json_is_bad_input(tmp_path: Path) -> None:
     pdf = make_pdf(tmp_path / "score.pdf", 2)
     map_file = tmp_path / "map.json"

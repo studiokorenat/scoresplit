@@ -27,6 +27,7 @@ from scoresplit.exporter import (
     part_filenames,
     safe_filename,
 )
+from scoresplit.cache import file_sha256
 from scoresplit.models import Extra, Part, Result
 
 # The tiny-PDF and result helpers of the other exporter tests.
@@ -231,6 +232,11 @@ def _example(tmp_path: Path) -> tuple[Path, Result]:
     # Page 9 is in no part and detection gave it no reason: "unassigned".
     result.title = "Song & Dance"
     result.arranger = "A. Person"
+    # Made for THIS PDF, as inspect() would give it (make_map's own source
+    # and sha256 belong to no file: the export would take them for edits
+    # made for another PDF and add a warning, see review step 21).
+    result.source = pdf.name
+    result.sha256 = file_sha256(pdf)
     return pdf, result
 
 
@@ -360,10 +366,10 @@ def test_the_csv_leaves_the_long_whole_pdf_fields_to_json_and_xml(tmp_path: Path
     with (export / f"{target.name}.csv").open(encoding="utf-8-sig", newline="") as handle:
         text = handle.read()
     assert "a long warning" not in text
-    assert "0" * 64 not in text  # the sha256 of make_map
+    assert file_sha256(pdf) not in text
     data = json.loads((export / f"{target.name}.json").read_text(encoding="utf-8"))
     assert data["warnings"] == ["a long warning about the whole PDF"]
-    assert data["sha256"] == "0" * 64
+    assert data["sha256"] == file_sha256(pdf)
 
 
 def test_the_csv_export_never_starts_a_cell_with_a_formula(tmp_path: Path) -> None:
@@ -529,6 +535,43 @@ def test_the_export_describes_the_pdf_really_split(tmp_path: Path) -> None:
     ]
     # The caller's result itself is not changed.
     assert result.page_count == 10
+
+
+def test_the_export_names_the_pdf_really_split_and_says_where_the_edits_came_from(
+    tmp_path: Path,
+) -> None:
+    # Review step 21: edits made for another PDF (other.pdf) and loaded with
+    # --force. The export must name the PDF really split (its file name and
+    # sha256), so it loads back on that PDF without --force, and a warning
+    # keeps the history visible.
+    pdf, result = _example(tmp_path)
+    result.source = "other.pdf"
+    result.sha256 = "0" * 64
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+
+    assert data["source"] == "score.pdf"
+    assert data["sha256"] == file_sha256(pdf)
+    assert data["warnings"] == [
+        "split with edits made for another PDF (other.pdf): "
+        "the reasons of the extra pages (cover, blank) come from that PDF"
+    ]
+    # The caller's result itself is not changed.
+    assert (result.source, result.sha256, result.warnings) == ("other.pdf", "0" * 64, [])
+
+
+def test_the_export_of_edits_for_the_same_pdf_gets_no_warning(tmp_path: Path) -> None:
+    # The same PDF under another file name (a renamed copy): its sha256 is
+    # the same, so the edits ARE for this PDF. Only the name is updated.
+    pdf, result = _example(tmp_path)
+    result.source = "renamed copy.pdf"  # the sha256 stays this PDF's
+    result.warnings = ["an earlier warning"]
+    target, _ = export_parts(result, pdf, tmp_path / "out")
+    data = json.loads((target / "export" / f"{target.name}.json").read_text(encoding="utf-8"))
+
+    assert data["source"] == "score.pdf"
+    assert data["sha256"] == file_sha256(pdf)
+    assert data["warnings"] == ["an earlier warning"]
 
 
 # Each CSV row is {"row_type": ..., **part, **credits}: a part's fields

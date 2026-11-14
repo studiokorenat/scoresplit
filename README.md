@@ -217,8 +217,10 @@ named `<Title> - <Arranger>` (the composer when there is no arranger):
   confidence, notes, ...) with its PDF file name, the extra pages, the
   warnings and the PDF's fingerprint. The CSV is the readable table (see
   below). Delete what you don't need. The export always describes the PDF
-  that was really split: its `page_count` and extra pages come from that
-  PDF, even when the edits were made for another one (`--force`).
+  that was really split: its file name, fingerprint, `page_count` and extra
+  pages come from that PDF, even when the edits were made for another one
+  (`--force`). Then a warning names the other PDF, and the JSON loads back
+  as edits for the split PDF without `--force`.
 
 The CSV has one row per part, then one row per group of extra pages, with
 these columns (find a column by its **name** in the header row, not by its
