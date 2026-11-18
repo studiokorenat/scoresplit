@@ -315,6 +315,16 @@ def _engine(lang: str):
     # (see page_analyzer._init_worker).
     import tesserocr
 
+    # Silence Leptonica, the image library inside tesserocr. It writes
+    # messages like "Error in boxClipToRectangle: box outside rectangle"
+    # straight to stderr, which is the user's terminal (and where the web
+    # tool reads the progress). They are harmless: Tesseract carries on and
+    # the words don't change. 0.2.0 never showed them, because the separate
+    # `tesseract` program's messages were caught by pytesseract. The setting
+    # is for the whole process, so setting it again for a second engine is
+    # fine (and cheap).
+    tesserocr.set_leptonica_log_level(tesserocr.LeptLogLevel.NONE)
+
     try:
         # path = the language folder, lang = e.g. "eng+hrv". The engine mode
         # (oem) stays at Tesseract's default, the same as the `tesseract`

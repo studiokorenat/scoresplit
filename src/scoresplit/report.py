@@ -20,6 +20,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
+from . import __version__
 from .exporter import EXTRA_FOLDER, EXTRA_LABELS, safe_filename
 from .instruments import load_dictionary
 from .models import Part, Result
@@ -118,7 +119,10 @@ def print_result(
             f"Arranger: {escape(result.arranger or '-')}\n"
             f"Source:   {escape(result.source)} ({result.page_count} pages, {source_kind})\n"
             f"Folder:   [cyan]{escape(safe_filename(result.folder_name()))}/[/]",
-            title="scoresplit",
+            # The version in the box title ("scoresplit 0.2.0"), so a run in
+            # the terminal shows which version made it. (Only this box: the
+            # JSON output has no title.)
+            title=f"scoresplit {__version__}",
         )
     )
 
