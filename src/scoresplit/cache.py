@@ -13,9 +13,10 @@ then ``split`` on the same file, the second run should be instant. So the
 the Linux standard for cache folders).
 
 The file name includes ANALYSIS_VERSION and the OCR settings (including
-whether Tesseract was installed), so changing the analysis code (bump the
-version!), the OCR language or installing Tesseract automatically ignores
-old cache files. Deleting the folder is always safe.
+whether Tesseract's language files were found), so changing the analysis
+code (bump the version!), the OCR language or installing Tesseract's
+language files automatically ignores old cache files. Deleting the folder is
+always safe.
 """
 
 from __future__ import annotations

@@ -88,7 +88,11 @@ LIST_LANGS_FOLDER_PATTERN = re.compile(r'"([^"]+)"')
 
 
 class OcrUnavailableError(RuntimeError):
-    """Raised when a scanned page needs OCR but Tesseract isn't installed."""
+    """
+    Raised when a scanned page needs OCR, but Tesseract's language files
+    can't be found or loaded. (The engine itself comes with tesserocr, so it
+    can't be missing.) api.inspect turns it into OcrMissingError, exit code 3.
+    """
 
 
 @lru_cache(maxsize=1)

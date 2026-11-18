@@ -27,7 +27,8 @@ the numbers are defined in api.py):
     1  cancelled by the user (quit the editor without splitting)
     2  bad input (file missing or not a PDF, invalid edits file, edits for
        a different PDF, unknown option, ...)
-    3  OCR needed but Tesseract isn't installed
+    3  OCR needed, but Tesseract's language files were not found (install
+       Tesseract with its language data, see the README)
     4  output folder already exists (use --force)
     5  unexpected error (could not write files, OCR crashed, ...)
        Set SCORESPLIT_DEBUG=1 to see the full Python traceback instead.

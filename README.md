@@ -63,11 +63,18 @@ scoresplit is free software under the [MIT license](LICENSE).
 
 You need three things:
 
-1. **Tesseract OCR**, the program that reads scanned pages (PDFs exported
-   from notation software don't need it),
+1. **Tesseract OCR** from your system's packages, for its **language files**
+   (scanned pages need them; PDFs exported from notation software don't),
 2. **uv**, the Python package manager (it downloads Python 3.11+ by itself,
    so you don't have to install Python),
 3. **scoresplit** itself, installed with uv.
+
+The OCR engine itself comes with scoresplit (the `tesserocr` package, with
+Tesseract inside), so scanned pages are read inside scoresplit without
+starting a separate program. The system's Tesseract package provides the
+language files, and scoresplit asks its `tesseract` program where they are.
+Keep your language files somewhere else? Set `TESSDATA_PREFIX` to the folder
+that holds them (the one with `eng.traineddata`), and scoresplit uses that.
 
 Tesseract reads English (`eng`) and Croatian (`hrv`, which also covers
 Serbian and Bosnian in Latin script). Without `hrv` scoresplit still works,
@@ -98,6 +105,11 @@ sudo dnf install tesseract tesseract-langpack-eng tesseract-langpack-hrv uv git
 brew install tesseract tesseract-lang uv git
 ```
 
+On macOS older than 15 there is no ready-made `tesserocr` package, so the
+scoresplit install builds it from source. That needs Apple's command line
+tools (`xcode-select --install`) and `brew install pkg-config`, and takes a
+few minutes.
+
 ### Windows 10 / 11
 
 Open **PowerShell** and install the tools with `winget`:
@@ -108,7 +120,8 @@ winget install --id astral-sh.uv -e
 winget install --id Git.Git -e
 ```
 
-Then put Tesseract on the PATH (the installer doesn't):
+Then put Tesseract on the PATH (the installer doesn't), so scoresplit can
+ask it where the language files are:
 
 ```powershell
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\Program Files\Tesseract-OCR", "User")
@@ -151,7 +164,7 @@ scoresplit "my score.pdf"
 then shows what it found:
 
 ```
-╭─────────────────────────────────── scoresplit ────────────────────────────────────╮
+╭──────────────────────────────── scoresplit 0.3.0 ─────────────────────────────────╮
 │ Example Music Score                                                               │
 │ Composer: John Doe                                                                │
 │ Arranger: Jane Doe                                                                │
@@ -391,7 +404,7 @@ error with code 2, never a crash.
 | 0 | Success |
 | 1 | Cancelled by the user (quit the editor without splitting) |
 | 2 | Bad input: file missing or not a PDF, invalid edits file, edits for another PDF, unknown option, `--json` without `--yes` |
-| 3 | OCR needed but Tesseract isn't installed |
+| 3 | OCR needed, but Tesseract's language files were not found (install Tesseract as shown under [Installation](#installation), or fix `TESSDATA_PREFIX`) |
 | 4 | The output folder already exists (use `--force`) |
 | 5 | Unexpected error (could not write the files, OCR crashed, ...). Set `SCORESPLIT_DEBUG=1` to see the Python traceback |
 
@@ -494,7 +507,8 @@ Every module starts with a docstring that explains its step; start reading
 at `cli.py`, then `api.py` and `pipeline.py`.
 
 All dependencies are permissively licensed (MIT, BSD, Apache): pypdfium2,
-numpy, pillow, pytesseract, rapidfuzz, pydantic, pyyaml, typer, rich.
+numpy, pillow, tesserocr (with the Tesseract and Leptonica libraries
+inside), rapidfuzz, pydantic, pyyaml, typer, rich.
 
 ## License
 
