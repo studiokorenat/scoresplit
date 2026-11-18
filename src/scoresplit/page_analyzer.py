@@ -427,10 +427,14 @@ def analyze_page(
     if facts.ink_ratio < BLANK_INK_RATIO:
         return facts  # blank page: nothing to read
 
+    # ocr_available is False when no language files were found (see
+    # ocr.tessdata_folder): the Tesseract language packages are missing, or
+    # TESSDATA_PREFIX points to a folder without them. The OCR engine itself
+    # comes with scoresplit (the tesserocr package), so it can't be missing.
     if not settings.ocr_available:
         raise OcrUnavailableError(
             f"page {page_number} is a scanned image and needs OCR, but the "
-            "'tesseract' program is not installed"
+            "OCR language files were not found"
         )
 
     facts.header = ocr_region(gray, header_region, dpi, psm=11, lang=settings.lang)
@@ -516,18 +520,41 @@ def default_worker_count() -> int:
 
 
 def _init_worker(pdf_path: str) -> None:
-    """Runs once in each worker process when it starts."""
+    """
+    Runs once in each worker process when it starts, before its first page.
+
+    The OCR runs INSIDE this worker: the Tesseract engine (tesserocr) is
+    loaded into the worker on its first OCR call (ocr._engine) and kept
+    for the next pages. No separate `tesseract` program is started.
+    So everything set here applies to the OCR as well.
+    """
+    # "global": this function sets the module variable, not a local one.
     global _worker_pdf
-    # Tesseract itself can use several threads. Each worker already keeps one
-    # core busy, so extra threads only slow things down: limit to 1.
+
+    # One thread for Tesseract. Each worker already keeps one core busy, so
+    # extra threads per worker only fight over the same cores.
+    #
+    # Tesseract built with OpenMP (a library for running a loop on several
+    # threads) reads this setting ONCE, when the library is loaded. That
+    # happens on the first OCR call (ocr._engine imports tesserocr there),
+    # so setting it here, first thing in the worker, is early enough.
+    #
+    # The tesserocr 2.13.0 wheels bundle a Tesseract built WITHOUT OpenMP,
+    # so today this changes nothing: a worker has one thread either way
+    # (measured, see the v3 log). It stays as a safeguard: where no wheel
+    # exists (e.g. macOS older than 15), pip builds tesserocr against the
+    # system's Tesseract, and that one often IS built with OpenMP (Arch's
+    # is). Without the limit it would start a thread for every core.
     os.environ["OMP_THREAD_LIMIT"] = "1"
+
     # Lower this worker's CPU priority, like starting it with `nice`. The OCR
     # still uses every core that is idle, but whenever another program wants
     # the CPU (the desktop, a web request on a server), that program goes
-    # first. Tesseract runs as a child of this worker and inherits the low
-    # priority. os.nice doesn't exist on Windows, hence the hasattr check.
+    # first. The OCR runs in this same process, so it has this low priority
+    # too. os.nice doesn't exist on Windows, hence the hasattr check.
     if hasattr(os, "nice"):
         os.nice(WORKER_NICENESS)
+
     _worker_pdf = open_pdf(pdf_path)
 
 
@@ -583,6 +610,29 @@ def analyze_document(
         # workers start; each worker gets them with its page.
         # (Not needed when OCR is forced on or off: then text decides nothing.)
         stamps = stamps_of_document(pdf_path) if settings.ocr_mode == "auto" else frozenset()
+
+        # One thread for numpy's maths library in the workers.
+        #
+        # numpy comes with OpenBLAS, a library for fast matrix maths (np.dot,
+        # np.linalg, ...). When it loads, it starts a helper thread for every
+        # core, ready to split a big calculation. scoresplit never asks it for
+        # one, so in every worker those threads only sleep (11 per worker on
+        # a 12-core laptop, using almost no CPU). They make the workers look
+        # as if they used many threads, and if a later change did use matrix
+        # maths, 6 workers x 12 threads would fight over 12 cores.
+        #
+        # Why here and not in _init_worker: OpenBLAS reads this setting once,
+        # when numpy is imported. A worker imports numpy while it loads this
+        # module, BEFORE _init_worker runs, so setting it there is too late.
+        # Workers copy the main process's environment when they start, so
+        # setting it here, before the pool starts, reaches them in time.
+        # (The main process already has numpy loaded, so nothing changes
+        # for it.)
+        #
+        # setdefault: only when it isn't set yet, so a value the user set
+        # themselves is kept.
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
         try:
             with ProcessPoolExecutor(
                 max_workers=worker_count, initializer=_init_worker, initargs=(str(pdf_path),)
