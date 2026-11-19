@@ -144,10 +144,12 @@ scoresplit --version
 If the shell says "command not found" (Windows: "not recognized"), run
 `uv tool update-shell` and open a new terminal.
 
-Update to the latest version, or uninstall:
+Update to the latest version, install one exact version (every release is
+listed in [CHANGELOG.md](CHANGELOG.md)), or uninstall:
 
 ```bash
 uv tool install --reinstall git+https://github.com/studiokorenat/scoresplit.git
+uv tool install --reinstall git+https://github.com/studiokorenat/scoresplit.git@v0.3.0
 uv tool uninstall scoresplit
 ```
 

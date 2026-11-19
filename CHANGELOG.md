@@ -4,7 +4,7 @@ What changed in each release of scoresplit. The newest release is at the
 top. Version numbers follow [Semantic Versioning](https://semver.org/):
 below 1.0, a breaking change raises the middle number (0.1 → 0.2).
 
-## 0.3.0 (not released yet)
+## 0.3.0 (2026-11-19)
 
 **Scanned PDFs are about twice as fast.** The OCR now runs inside
 scoresplit instead of starting the `tesseract` program for every piece of a
@@ -23,6 +23,7 @@ and exit codes are the same, and the cache from 0.2.0 is still used.
   Finding which parts are copies of each other compares their pages; this
   now runs on several CPU cores and needs about half the CPU, with the
   same answers. italiano.pdf (38 comparisons, 118 pages): 40 s → 9 s.
+  A comparison of only a few pages no longer starts extra processes.
 - A progress bar "Comparing same-name parts" (and a new `--progress json`
   stage `compare`) shows that comparison. It appears only when there is
   something to compare.
@@ -46,6 +47,9 @@ and exit codes are the same, and the cache from 0.2.0 is still used.
 
 - Harmless messages from Leptonica (the image library inside the OCR
   engine), such as "Error in boxClipToRectangle", are no longer printed.
+- If the `tesseract` program doesn't answer when scoresplit asks where the
+  language files are, scoresplit stops waiting after 20 seconds and reports
+  them as not found (exit code 3), instead of hanging.
 
 ## 0.2.0 (2026-11-14)
 
