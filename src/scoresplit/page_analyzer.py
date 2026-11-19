@@ -32,9 +32,11 @@ from __future__ import annotations
 
 import os
 from collections import Counter
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pypdfium2 as pdfium
@@ -49,12 +51,13 @@ from .image_analysis import (
     find_text_boxes,
     find_text_lines,
     ink_ratio,
+    music_fingerprint,
 )
 from .instruments import contains_score_keyword, find_part_name
 # ProgressCallback (pages_done, pages_total) is defined in models.py; it is
 # imported here so `page_analyzer.ProgressCallback` keeps working too.
 from .models import PageFacts, PartName, ProgressCallback, TextSpan
-from .ocr import OcrUnavailableError, ocr_image, ocr_region, tesseract_available
+from .ocr import OcrUnavailableError, ocr_image, ocr_region, tessdata_folder, tesseract_available
 from .pdf_reader import (
     MIN_LETTERS_FOR_TEXT_PAGE,
     count_letters,
@@ -427,10 +430,14 @@ def analyze_page(
     if facts.ink_ratio < BLANK_INK_RATIO:
         return facts  # blank page: nothing to read
 
+    # ocr_available is False when no language files were found (see
+    # ocr.tessdata_folder): the Tesseract language packages are missing, or
+    # TESSDATA_PREFIX points to a folder without them. The OCR engine itself
+    # comes with scoresplit (the tesserocr package), so it can't be missing.
     if not settings.ocr_available:
         raise OcrUnavailableError(
             f"page {page_number} is a scanned image and needs OCR, but the "
-            "'tesseract' program is not installed"
+            "OCR language files were not found"
         )
 
     facts.header = ocr_region(gray, header_region, dpi, psm=11, lang=settings.lang)
@@ -490,6 +497,12 @@ _worker_pdf: pdfium.PdfDocument | None = None
 # The lowest CPU priority on Linux and macOS (the same as `nice -n 19`).
 WORKER_NICENESS = 19
 
+# Up to this many fingerprints are made right here in the main process,
+# without a worker pool. Starting a pool costs about half a second (each
+# worker starts Python, loads numpy and opens the PDF), while one fingerprint
+# takes about 0.13 s, so for a few pages the pool would only slow things down.
+FINGERPRINT_IN_PROCESS_MAX_PAGES = 4
+
 
 def default_worker_count() -> int:
     """
@@ -515,19 +528,54 @@ def default_worker_count() -> int:
     return max(1, cores // 2)
 
 
-def _init_worker(pdf_path: str) -> None:
-    """Runs once in each worker process when it starts."""
+def _init_worker(pdf_path: str, tessdata: str | None = None) -> None:
+    """
+    Runs once in each worker process when it starts, before its first page.
+
+    The OCR runs INSIDE this worker: the Tesseract engine (tesserocr) is
+    loaded into the worker on its first OCR call (ocr._engine) and kept
+    for the next pages. No separate `tesseract` program is started.
+    So everything set here applies to the OCR as well.
+
+    ``tessdata`` is the language folder the main process found (see
+    ocr.tessdata_folder), or None if it found none.
+    """
+    # "global": this function sets the module variable, not a local one.
     global _worker_pdf
-    # Tesseract itself can use several threads. Each worker already keeps one
-    # core busy, so extra threads only slow things down: limit to 1.
+
+    # Use the language folder the main process already found. A worker
+    # started with "forkserver" or "spawn" (Python 3.14 on Linux, macOS,
+    # Windows) doesn't share the main process's remembered answer, so it
+    # would otherwise run `tesseract --list-langs` again, once per worker.
+    # ocr.tessdata_folder looks at TESSDATA_PREFIX first, so setting it here
+    # (in this worker only) also makes sure every worker uses the same folder.
+    if tessdata is not None:
+        os.environ["TESSDATA_PREFIX"] = tessdata
+
+    # One thread for Tesseract. Each worker already keeps one core busy, so
+    # extra threads per worker only fight over the same cores.
+    #
+    # Tesseract built with OpenMP (a library for running a loop on several
+    # threads) reads this setting ONCE, when the library is loaded. That
+    # happens on the first OCR call (ocr._engine imports tesserocr there),
+    # so setting it here, first thing in the worker, is early enough.
+    #
+    # The tesserocr 2.13.0 wheels bundle a Tesseract built WITHOUT OpenMP,
+    # so today this changes nothing: a worker has one thread either way
+    # (measured, see the v3 log). It stays as a safeguard: where no wheel
+    # exists (e.g. macOS older than 15), pip builds tesserocr against the
+    # system's Tesseract, and that one often IS built with OpenMP (Arch's
+    # is). Without the limit it would start a thread for every core.
     os.environ["OMP_THREAD_LIMIT"] = "1"
+
     # Lower this worker's CPU priority, like starting it with `nice`. The OCR
     # still uses every core that is idle, but whenever another program wants
     # the CPU (the desktop, a web request on a server), that program goes
-    # first. Tesseract runs as a child of this worker and inherits the low
-    # priority. os.nice doesn't exist on Windows, hence the hasattr check.
+    # first. The OCR runs in this same process, so it has this low priority
+    # too. os.nice doesn't exist on Windows, hence the hasattr check.
     if hasattr(os, "nice"):
         os.nice(WORKER_NICENESS)
+
     _worker_pdf = open_pdf(pdf_path)
 
 
@@ -537,6 +585,68 @@ def _analyze_in_worker(
     """The job a worker runs for one page."""
     assert _worker_pdf is not None, "worker was not initialised"
     return analyze_page(_worker_pdf, page_number, settings, stamps)
+
+
+def _run_in_workers(
+    pdf_path: Path,
+    worker_count: int,
+    job: Callable[..., Any],
+    jobs: list[tuple],
+    on_result: Callable[[Any], None],
+) -> None:
+    """
+    Run `job(*arguments)` for every tuple of arguments in `jobs` in a pool
+    of `worker_count` worker processes, and call `on_result(result)` in THIS
+    process for each result, in the order they finish (not the order of
+    `jobs`). Each worker opens `pdf_path` once (_init_worker).
+
+    Used for the page analysis and for the music fingerprints of the
+    duplicate-part check (fingerprint_pages).
+    """
+    # One thread for numpy's maths library in the workers.
+    #
+    # numpy comes with OpenBLAS, a library for fast matrix maths (np.dot,
+    # np.linalg, ...). When it loads, it starts a helper thread for every
+    # core, ready to split a big calculation. scoresplit never asks it for
+    # one, so in every worker those threads only sleep (11 per worker on
+    # a 12-core laptop, using almost no CPU). They make the workers look
+    # as if they used many threads, and if a later change did use matrix
+    # maths, 6 workers x 12 threads would fight over 12 cores.
+    #
+    # Why here and not in _init_worker: OpenBLAS reads this setting once,
+    # when numpy is imported. A worker imports numpy while it loads this
+    # module, BEFORE _init_worker runs, so setting it there is too late.
+    # Workers copy the main process's environment when they start, so
+    # setting it here, before the pool starts, reaches them in time.
+    # (The main process already has numpy loaded, so nothing changes
+    # for it.)
+    #
+    # setdefault: only when it isn't set yet, so a value the user set
+    # themselves is kept.
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+    # The language folder, found once here (it is remembered, so usually this
+    # costs nothing) and handed to every worker.
+    tessdata = tessdata_folder()
+
+    with ProcessPoolExecutor(
+        max_workers=worker_count, initializer=_init_worker, initargs=(str(pdf_path), tessdata)
+    ) as pool:
+        # submit() queues one job and returns a "future" (a promise of a
+        # result). as_completed() yields the futures as they finish.
+        # `*arguments` unpacks the tuple: job(*(5, x)) is job(5, x).
+        futures = [pool.submit(job, *arguments) for arguments in jobs]
+        try:
+            for future in as_completed(futures):
+                on_result(future.result())  # result() re-raises any error from the worker
+        except BaseException:
+            # A job failed (or the user pressed Ctrl+C). Throw away the jobs
+            # still waiting in the queue, so we don't OCR hundreds of pages
+            # before reporting the error. Only the few jobs already running
+            # are waited for.
+            # (BaseException also includes Ctrl+C, unlike Exception.)
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise  # re-raise the same error for the caller
 
 
 def stamps_of_document(pdf_path: Path) -> frozenset[str]:
@@ -583,29 +693,22 @@ def analyze_document(
         # workers start; each worker gets them with its page.
         # (Not needed when OCR is forced on or off: then text decides nothing.)
         stamps = stamps_of_document(pdf_path) if settings.ocr_mode == "auto" else frozenset()
+
+        def keep(facts: PageFacts) -> None:
+            """Called with each analysed page, as soon as a worker is done with it."""
+            known[facts.page_number] = facts
+            if progress:
+                # `known` holds the cached pages plus those analysed so far.
+                progress(len(known), page_count)
+
         try:
-            with ProcessPoolExecutor(
-                max_workers=worker_count, initializer=_init_worker, initargs=(str(pdf_path),)
-            ) as pool:
-                # submit() queues one job and returns a "future" (a promise of a
-                # result). as_completed() yields the futures as they finish.
-                futures = [pool.submit(_analyze_in_worker, n, settings, stamps) for n in todo]
-                done = page_count - len(todo)
-                try:
-                    for future in as_completed(futures):
-                        facts = future.result()  # re-raises any error from the worker
-                        known[facts.page_number] = facts
-                        done += 1
-                        if progress:
-                            progress(done, page_count)
-                except BaseException:
-                    # A page failed (or the user pressed Ctrl+C). Throw away
-                    # the pages still waiting in the queue, so we don't OCR
-                    # hundreds of pages before reporting the error. Only the
-                    # few pages already running are waited for.
-                    # (BaseException also includes Ctrl+C, unlike Exception.)
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    raise  # re-raise the same error for the caller
+            _run_in_workers(
+                pdf_path,
+                worker_count,
+                _analyze_in_worker,
+                [(n, settings, stamps) for n in todo],
+                keep,
+            )
         finally:
             # Runs on success AND on error: cache every page analysed so far,
             # so that the next run doesn't start again from zero.
@@ -613,3 +716,74 @@ def analyze_document(
                 cache.save_facts(sha256, settings.cache_key(), known)
 
     return [known[n] for n in range(1, page_count + 1)]
+
+
+# ---------------------------------------------------------------------------
+# Music fingerprints for the duplicate-part check (in parallel)
+# ---------------------------------------------------------------------------
+
+
+def page_fingerprint(pdf: pdfium.PdfDocument, page_number: int) -> np.ndarray:
+    """
+    The music fingerprint of one page (image_analysis.music_fingerprint):
+    rendered at DEFAULT_DPI and straightened first.
+    """
+    page = pdf[page_number - 1]
+    width, height = page.get_size()
+    gray = render_page_gray(page, fit_dpi(width, height, DEFAULT_DPI))
+    return music_fingerprint(deskew(gray))
+
+
+def _fingerprint_in_worker(page_number: int) -> tuple[int, np.ndarray]:
+    """The job a worker runs for one page: (page number, its fingerprint)."""
+    assert _worker_pdf is not None, "worker was not initialised"
+    return page_number, page_fingerprint(_worker_pdf, page_number)
+
+
+def fingerprint_pages(
+    pdf_path: Path,
+    page_numbers: list[int],
+    progress: ProgressCallback | None = None,
+    workers: int | None = None,
+) -> dict[int, np.ndarray]:
+    """
+    The music fingerprints of these pages: {page number: fingerprint}.
+
+    Each page takes a fraction of a second (rendering, straightening, and
+    finding the staff lines), but a PDF with many same-name parts needs
+    many pages (italiano.pdf: 118), so they are made in parallel, in the
+    same kind of worker pool as the page analysis (same worker count, low
+    priority). A few pages (FINGERPRINT_IN_PROCESS_MAX_PAGES or fewer) are
+    made here, without a pool. Either way the fingerprints are the same.
+    `progress(done, total)` counts pages; it is not called at all when
+    `page_numbers` is empty.
+    """
+    fingerprints: dict[int, np.ndarray] = {}
+    if not page_numbers:
+        return fingerprints
+    total = len(page_numbers)
+    if progress:
+        progress(0, total)
+
+    def keep(result: tuple[int, np.ndarray]) -> None:
+        """Called with each fingerprint, as soon as a worker is done with it."""
+        page_number, fingerprint = result  # "unpack" the (number, fingerprint) pair
+        fingerprints[page_number] = fingerprint
+        if progress:
+            progress(len(fingerprints), total)
+
+    if total <= FINGERPRINT_IN_PROCESS_MAX_PAGES:
+        # Only a few pages: make them here, one after the other.
+        pdf = open_pdf(str(pdf_path))
+        try:
+            for page_number in page_numbers:
+                keep((page_number, page_fingerprint(pdf, page_number)))
+        finally:
+            pdf.close()  # also closed when an error happens above
+        return fingerprints
+
+    worker_count = max(1, min(workers or default_worker_count(), total))
+    _run_in_workers(
+        pdf_path, worker_count, _fingerprint_in_worker, [(n,) for n in page_numbers], keep
+    )
+    return fingerprints

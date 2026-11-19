@@ -92,15 +92,27 @@ def test_a_language_name_brings_no_control_character_into_the_warnings(
 
 def test_inspect_without_tesseract_is_ocr_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def no_tesseract(*args, **kwargs):
-        raise OcrUnavailableError("Tesseract is not installed")
+        raise OcrUnavailableError(
+            "page 4 is a scanned image and needs OCR, but the OCR language files were not found"
+        )
 
-    # Replace the slow analysis with a fake that fails like a missing Tesseract.
+    # Replace the slow analysis with a fake that fails like missing language
+    # files (the OCR engine itself comes with scoresplit since 0.3.0).
     monkeypatch.setattr(api, "inspect_pdf", no_tesseract)
     pdf = make_pdf(tmp_path / "score.pdf", 1)
     with pytest.raises(api.OcrMissingError) as caught:
         api.inspect(pdf)
     assert caught.value.exit_code == 3
+    # The message = the error, then the hint with the fix.
+    assert caught.value.message.startswith("page 4 is a scanned image")
+    assert "language files were not found. Install Tesseract with its English language data" in (
+        caught.value.message
+    )
     assert "sudo pacman -S tesseract" in caught.value.message
+    assert "TESSDATA_PREFIX" in caught.value.message
+    # The old hint began "Install it:", which no longer fits after "language
+    # files were not found" (what is "it"?).
+    assert "Install it:" not in caught.value.message
 
 
 def test_inspect_reports_progress_and_returns_a_page_map(tmp_path: Path) -> None:

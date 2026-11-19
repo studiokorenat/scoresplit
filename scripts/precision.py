@@ -685,7 +685,7 @@ def main() -> int:
             return 4
 
     if not tesseract_available():
-        console.print("[red]Tesseract is not installed; the scanned examples need it.[/red]")
+        console.print("[red]Tesseract's language files were not found; the scanned examples need them.[/red]")
         return 3
 
     if args.draft:

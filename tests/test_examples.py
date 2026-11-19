@@ -134,7 +134,7 @@ def test_example_is_not_worse_than_baseline(pdf_name: str, needs_ocr: bool) -> N
     if not pdf.exists():
         pytest.skip(f"example file missing: {pdf_name}")
     if needs_ocr and not tesseract_available():
-        pytest.skip("tesseract not installed")
+        pytest.skip("Tesseract's language files were not found (OCR unavailable)")
 
     golden_path = precision.find_golden(pdf_name)
     golden = precision.load_golden(golden_path)

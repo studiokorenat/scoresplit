@@ -247,13 +247,19 @@ def test_missing_edits_file_and_edits_for_another_pdf_are_bad_input(tmp_path: Pa
 
 def test_missing_tesseract_is_exit_code_3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def no_tesseract(*args, **kwargs):
-        raise OcrUnavailableError("Tesseract is not installed")
+        raise OcrUnavailableError(
+            "page 1 is a scanned image and needs OCR, but the OCR language files were not found"
+        )
 
     monkeypatch.setattr(api, "inspect_pdf", no_tesseract)
     pdf = make_pdf(tmp_path / "score.pdf", 1)
     result = runner.invoke(cli.app, ["inspect", str(pdf), "--json"])
-    assert result.exit_code == cli.EXIT_OCR_MISSING
-    assert "Tesseract" in json_error(result.stdout, cli.EXIT_OCR_MISSING)["message"]
+    # The web tool relies on exit code 3 and the JSON "code" 3: they must
+    # not change, only the message text may.
+    assert result.exit_code == cli.EXIT_OCR_MISSING == 3
+    message = json_error(result.stdout, cli.EXIT_OCR_MISSING)["message"]
+    assert "language files were not found" in message
+    assert "Install Tesseract with its English language data" in message
 
 
 def test_existing_output_folder_is_exit_code_4(tmp_path: Path) -> None:

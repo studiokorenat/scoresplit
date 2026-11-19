@@ -177,14 +177,32 @@ def estimate_skew_slope(gray: np.ndarray) -> float:
     profiles = [ink[:, a:b].mean(axis=1) for a, b in zip(edges[:-1], edges[1:], strict=True)]
     centres = (edges[:-1] + edges[1:]) / 2 - left  # x of each strip, from the left edge
 
+    # Shortcuts that save half the time and give exactly the same answer:
+    #  - Shifts are whole rows, so neighbouring slopes often shift every strip
+    #    by the same rows. Their scores are then equal, and only the FIRST of
+    #    them can win (a later one must score MORE, ">"), so each set of
+    #    shifts is scored once, at its first slope (`scored`).
+    #  - The same strip shifted by the same rows is needed for many slopes:
+    #    it is made once and kept (`shifted`, keyed by (strip, rows)).
+    # The profiles are still added in the same order as before, so even the
+    # rounding of the sums is the same.
+    shifted: dict[tuple[int, int], np.ndarray] = {}
+    scored: set[tuple[int, ...]] = set()
+
     best_score, best_slope = -1.0, 0.0
     for slope in np.arange(-DESKEW_MAX_SLOPE, DESKEW_MAX_SLOPE + DESKEW_SLOPE_STEP / 2, DESKEW_SLOPE_STEP):
-        # np.roll shifts a profile up/down by the number of rows the tilt
-        # moved it at that strip.
-        combined = sum(
-            np.roll(profile, -int(round(slope * centre)))
-            for profile, centre in zip(profiles, centres, strict=True)
-        )
+        # How many rows to move each strip's profile back up (minus = up).
+        shifts = tuple(-int(round(slope * centre)) for centre in centres)
+        if shifts in scored:
+            continue
+        scored.add(shifts)
+        moved = []
+        for strip, (profile, rows) in enumerate(zip(profiles, shifts, strict=True)):
+            if (strip, rows) not in shifted:
+                # np.roll shifts a profile up/down by `rows` rows.
+                shifted[strip, rows] = np.roll(profile, rows)
+            moved.append(shifted[strip, rows])
+        combined = sum(moved)
         score = float((combined**2).sum())
         if score > best_score:
             best_score, best_slope = score, float(slope)
@@ -554,17 +572,29 @@ def _long_horizontal_runs(ink: np.ndarray, length: int) -> np.ndarray:
     height, width = ink.shape
     if width < length:
         return np.zeros_like(ink)
+    # The running sums count pixels in one row, so they never exceed the
+    # width. int16 (up to 32767) holds that for any page at 200 dpi, and is
+    # much faster than numpy's default int64: 4x less memory to move.
+    # A wider image (never seen) falls back to int32.
+    dtype = np.int16 if width < np.iinfo(np.int16).max else np.int32
     # sums[:, x] = number of ink pixels in columns 0..x-1 of each row.
-    sums = np.zeros((height, width + 1), dtype=np.int32)
-    sums[:, 1:] = np.cumsum(ink, axis=1)
+    # out=...: cumsum writes straight into `sums`, without a temporary copy.
+    sums = np.zeros((height, width + 1), dtype=dtype)
+    np.cumsum(ink, axis=1, dtype=dtype, out=sums[:, 1:])
     window_full = np.zeros((height, width), dtype=bool)
     window_full[:, length - 1 :] = (sums[:, length:] - sums[:, : width - length + 1]) == length
     # Running sum of window ends, to ask "any full window ending in x..x+L-1?".
-    ends = np.zeros((height, width + 1), dtype=np.int32)
-    ends[:, 1:] = np.cumsum(window_full, axis=1)
-    columns = np.arange(width)
-    upto = np.minimum(columns + length, width)
-    return (ends[:, upto] - ends[:, columns]) > 0
+    ends = np.zeros((height, width + 1), dtype=dtype)
+    np.cumsum(window_full, axis=1, dtype=dtype, out=ends[:, 1:])
+    # Count the window ends in x..x+L-1 = ends[x + L] - ends[x]. Near the
+    # right edge x + L runs past the end, so there the count stops at the
+    # last column: ends[width] - ends[x]. (Two slices, faster than
+    # looking up every column one by one.)
+    in_run = np.empty((height, width), dtype=bool)
+    edge = width - length + 1  # the first column whose window runs past the edge
+    in_run[:, :edge] = (ends[:, length:] - ends[:, :edge]) > 0
+    in_run[:, edge:] = (ends[:, width:] - ends[:, edge:width]) > 0
+    return in_run
 
 
 def music_fingerprint(gray: np.ndarray) -> np.ndarray:

@@ -105,6 +105,20 @@ def test_report_shows_square_brackets_literally() -> None:
     assert "Title [/b]" in text
 
 
+def test_the_report_box_title_shows_the_version() -> None:
+    # The box around the title block says "scoresplit 0.2.0", so a run in
+    # the terminal shows which version made it.
+    from scoresplit import __version__
+
+    page_map = make_map([Part(name="Flute", pages="1")])
+    console = Console(record=True, width=200)
+    print_result(console, page_map)
+    # The first line of the report is the top edge of the box, with the
+    # title in it: "╭─── scoresplit 0.2.0 ───╮".
+    first_line = console.export_text().splitlines()[0]
+    assert f"scoresplit {__version__}" in first_line
+
+
 # --- Finding 3: long file names ----------------------------------------------
 
 

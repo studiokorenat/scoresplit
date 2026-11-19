@@ -20,8 +20,8 @@ saved JSON that a person or a GUI edits, and in the --json output.
 
 Nothing here prints, asks questions or exits the program. When something
 goes wrong, a ScoresplitError is raised; each kind carries the exit code
-the CLI uses for it, so a caller can tell "bad input" from "Tesseract is
-missing" without reading the message. (Like a Laravel service class that
+the CLI uses for it, so a caller can tell "bad input" from "the OCR
+language files are missing" without reading the message. (Like a Laravel service class that
 a controller and an Artisan command can both call.)
 
 Example, from other Python code:
@@ -113,10 +113,16 @@ DEFAULT_LANGUAGES = "eng+hrv"
 #   "never"  never OCR (scanned pages stay unrecognised)
 OCR_MODES = ("auto", "always", "never")
 
-# Added to the "Tesseract isn't installed" error, so the user knows the fix.
+# Added to the "OCR missing" error, so the user knows the fix. The OCR
+# engine itself comes with scoresplit (the tesserocr package), so what can be
+# missing are Tesseract's language files. The system's Tesseract package
+# brings them, and scoresplit finds their folder by asking its `tesseract`
+# program (see ocr.tessdata_folder). TESSDATA_PREFIX can name another folder.
 TESSERACT_INSTALL_HINT = (
-    "Install it: Arch `sudo pacman -S tesseract tesseract-data-eng`, "
-    "Ubuntu `sudo apt install tesseract-ocr`."
+    "Install Tesseract with its English language data: "
+    "Arch `sudo pacman -S tesseract tesseract-data-eng`, "
+    "Ubuntu `sudo apt install tesseract-ocr`. "
+    "If TESSDATA_PREFIX is set, it must name the folder that holds eng.traineddata."
 )
 
 
@@ -170,7 +176,11 @@ class InvalidEditsError(BadInputError):
 
 
 class OcrMissingError(ScoresplitError):
-    """A page needs OCR, but Tesseract isn't installed."""
+    """
+    A page needs OCR, but Tesseract's language files were not found or
+    could not be loaded. (The OCR engine itself comes with scoresplit; the
+    language files come from the system's Tesseract package.)
+    """
 
     exit_code = EXIT_OCR_MISSING
 
@@ -326,6 +336,7 @@ def inspect(
     pdf: Path,
     options: InspectOptions | None = None,
     progress: ProgressCallback | None = None,
+    compare_progress: ProgressCallback | None = None,
 ) -> Result:
     """
     Detect which instrument parts are on which pages. Changes nothing on disk
@@ -336,11 +347,17 @@ def inspect(
         options:  OCR mode, languages, cache, workers (default: InspectOptions()).
         progress: optional function called as progress(pages_done, pages_total)
                   while the pages are analysed (this can take minutes with OCR).
+        compare_progress: optional function called the same way while parts
+                  with the same name are compared, to find copies (pages done,
+                  pages total). Called only when there is something to compare;
+                  it runs after the analysis and can take seconds on a PDF
+                  with many same-name parts.
 
     Raises:
         BadInputError:   the file is missing, isn't a PDF, is damaged or has a
                          password, or an option is invalid.
-        OcrMissingError: a page needs OCR, but Tesseract isn't installed.
+        OcrMissingError: a page needs OCR, but Tesseract's language files
+                         were not found (or could not be loaded).
     """
     # "x or y" gives y when x is None: the caller may leave options out.
     options = options or InspectOptions()
@@ -353,7 +370,12 @@ def inspect(
 
     try:
         result = inspect_pdf(
-            pdf, settings, progress=progress, use_cache=options.use_cache, workers=options.workers
+            pdf,
+            settings,
+            progress=progress,
+            use_cache=options.use_cache,
+            workers=options.workers,
+            compare_progress=compare_progress,
         )
     except pdfium.PdfiumError as error:
         raise _unreadable_pdf(pdf, error) from error
