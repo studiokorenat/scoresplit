@@ -57,7 +57,7 @@ from .instruments import contains_score_keyword, find_part_name
 # ProgressCallback (pages_done, pages_total) is defined in models.py; it is
 # imported here so `page_analyzer.ProgressCallback` keeps working too.
 from .models import PageFacts, PartName, ProgressCallback, TextSpan
-from .ocr import OcrUnavailableError, ocr_image, ocr_region, tesseract_available
+from .ocr import OcrUnavailableError, ocr_image, ocr_region, tessdata_folder, tesseract_available
 from .pdf_reader import (
     MIN_LETTERS_FOR_TEXT_PAGE,
     count_letters,
@@ -497,6 +497,12 @@ _worker_pdf: pdfium.PdfDocument | None = None
 # The lowest CPU priority on Linux and macOS (the same as `nice -n 19`).
 WORKER_NICENESS = 19
 
+# Up to this many fingerprints are made right here in the main process,
+# without a worker pool. Starting a pool costs about half a second (each
+# worker starts Python, loads numpy and opens the PDF), while one fingerprint
+# takes about 0.13 s, so for a few pages the pool would only slow things down.
+FINGERPRINT_IN_PROCESS_MAX_PAGES = 4
+
 
 def default_worker_count() -> int:
     """
@@ -522,7 +528,7 @@ def default_worker_count() -> int:
     return max(1, cores // 2)
 
 
-def _init_worker(pdf_path: str) -> None:
+def _init_worker(pdf_path: str, tessdata: str | None = None) -> None:
     """
     Runs once in each worker process when it starts, before its first page.
 
@@ -530,9 +536,21 @@ def _init_worker(pdf_path: str) -> None:
     loaded into the worker on its first OCR call (ocr._engine) and kept
     for the next pages. No separate `tesseract` program is started.
     So everything set here applies to the OCR as well.
+
+    ``tessdata`` is the language folder the main process found (see
+    ocr.tessdata_folder), or None if it found none.
     """
     # "global": this function sets the module variable, not a local one.
     global _worker_pdf
+
+    # Use the language folder the main process already found. A worker
+    # started with "forkserver" or "spawn" (Python 3.14 on Linux, macOS,
+    # Windows) doesn't share the main process's remembered answer, so it
+    # would otherwise run `tesseract --list-langs` again, once per worker.
+    # ocr.tessdata_folder looks at TESSDATA_PREFIX first, so setting it here
+    # (in this worker only) also makes sure every worker uses the same folder.
+    if tessdata is not None:
+        os.environ["TESSDATA_PREFIX"] = tessdata
 
     # One thread for Tesseract. Each worker already keeps one core busy, so
     # extra threads per worker only fight over the same cores.
@@ -607,8 +625,12 @@ def _run_in_workers(
     # themselves is kept.
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
+    # The language folder, found once here (it is remembered, so usually this
+    # costs nothing) and handed to every worker.
+    tessdata = tessdata_folder()
+
     with ProcessPoolExecutor(
-        max_workers=worker_count, initializer=_init_worker, initargs=(str(pdf_path),)
+        max_workers=worker_count, initializer=_init_worker, initargs=(str(pdf_path), tessdata)
     ) as pool:
         # submit() queues one job and returns a "future" (a promise of a
         # result). as_completed() yields the futures as they finish.
@@ -731,8 +753,10 @@ def fingerprint_pages(
     finding the staff lines), but a PDF with many same-name parts needs
     many pages (italiano.pdf: 118), so they are made in parallel, in the
     same kind of worker pool as the page analysis (same worker count, low
-    priority). `progress(done, total)` counts pages; it is not called at
-    all when `page_numbers` is empty.
+    priority). A few pages (FINGERPRINT_IN_PROCESS_MAX_PAGES or fewer) are
+    made here, without a pool. Either way the fingerprints are the same.
+    `progress(done, total)` counts pages; it is not called at all when
+    `page_numbers` is empty.
     """
     fingerprints: dict[int, np.ndarray] = {}
     if not page_numbers:
@@ -747,6 +771,16 @@ def fingerprint_pages(
         fingerprints[page_number] = fingerprint
         if progress:
             progress(len(fingerprints), total)
+
+    if total <= FINGERPRINT_IN_PROCESS_MAX_PAGES:
+        # Only a few pages: make them here, one after the other.
+        pdf = open_pdf(str(pdf_path))
+        try:
+            for page_number in page_numbers:
+                keep((page_number, page_fingerprint(pdf, page_number)))
+        finally:
+            pdf.close()  # also closed when an error happens above
+        return fingerprints
 
     worker_count = max(1, min(workers or default_worker_count(), total))
     _run_in_workers(

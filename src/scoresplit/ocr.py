@@ -86,6 +86,11 @@ TSV_COLUMNS = (
 # [^"]+ means "one or more characters that are not a double quote".
 LIST_LANGS_FOLDER_PATTERN = re.compile(r'"([^"]+)"')
 
+# How long `tesseract --list-langs` may take, in seconds. It normally answers
+# in a fraction of a second; a program that hangs (a broken install, a slow
+# network drive) must not hang scoresplit with it.
+LIST_LANGS_TIMEOUT_SECONDS = 20
+
 
 class OcrUnavailableError(RuntimeError):
     """
@@ -118,9 +123,19 @@ def tessdata_folder() -> str | None:
     #    `which tesseract`: it returns None when the program isn't installed.
     if shutil.which("tesseract") is None:
         return None
-    result = subprocess.run(
-        ["tesseract", "--list-langs"], capture_output=True, text=True, check=False
-    )
+    try:
+        result = subprocess.run(
+            ["tesseract", "--list-langs"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=LIST_LANGS_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        # TimeoutExpired: the program didn't answer in time.
+        # OSError: it couldn't be started at all (e.g. no permission to run it).
+        # Either way we don't know the folder; the caller reports that clearly.
+        return None
     # Some Tesseract versions print the list on stderr instead of stdout, so
     # look in both. The folder is in the first line that has double quotes.
     for line in (result.stdout + "\n" + result.stderr).splitlines():
@@ -277,6 +292,10 @@ _engines: dict[str, object] = {}
 # process's id number). See _engine for why this matters.
 _engines_pid: int | None = None
 
+# Engines this process got from its parent when it was started with "fork"
+# (see _engine). They are kept here and never used or closed.
+_parent_engines: list[object] = []
+
 
 def _engine(lang: str):
     """
@@ -297,8 +316,17 @@ def _engine(lang: str):
     """
     global _engines_pid  # "global": this function changes the module variable
     if _engines_pid != os.getpid():
-        # A new process (or the first call): start with no engines. The old
-        # ones belong to the parent process, so we leave them alone.
+        # A new process (or the first call): start with no engines of our
+        # own. Any engines already in _engines are copies of the parent's.
+        #
+        # We must leave those copies alone, and that includes NOT throwing
+        # them away: when Python frees a tesserocr engine, it shuts down its
+        # Tesseract (End()), and doing that on a forked copy of the parent's
+        # Tesseract can hang or crash the worker. So we move them to
+        # _parent_engines, which keeps them alive (unused) for as long as
+        # this process runs. They cost no extra memory: a forked process
+        # shares the parent's memory until one of them changes it.
+        _parent_engines.extend(_engines.values())
         _engines.clear()
         _engines_pid = os.getpid()
 

@@ -877,21 +877,30 @@ def _handle_same_names(parts: list[Segment], same_music: SameMusic | None = None
         for original, segment in candidates
     ]
 
-    # Only same-length pairs are compared, all in one call.
-    # zip() walks both lists side by side: (candidate, its same_length).
+    # Only same-length pairs are compared, all in one call. compared_indexes
+    # holds their positions in `candidates`, e.g. [0, 2] when the second
+    # candidate has a different length. enumerate() gives (position, value).
+    compared_indexes = [index for index, same in enumerate(same_length) if same]
     to_compare = [
-        (original.page_numbers(), segment.page_numbers())
-        for (original, segment), same in zip(candidates, same_length, strict=True)
-        if same
+        (candidates[index][0].page_numbers(), candidates[index][1].page_numbers())
+        for index in compared_indexes
     ]
     answers = [True] * len(to_compare) if same_music is None else same_music(to_compare)
-    # iter() + next(): take the answers one by one, in the same order as
-    # the same-length pairs in the loop below.
-    next_answer = iter(answers)
+    if len(answers) != len(to_compare):
+        # Must never happen: one answer per pair asked. A clear error is
+        # better than marking the wrong parts as duplicates.
+        raise ValueError(
+            f"same_music gave {len(answers)} answers for {len(to_compare)} comparisons"
+        )
+    # {candidate position: its answer}, e.g. {0: True, 2: False}. Looking an
+    # answer up by position means it can't end up with the wrong pair.
+    answer_of = dict(zip(compared_indexes, answers, strict=True))
 
-    for (original, segment), same in zip(candidates, same_length, strict=True):
+    for index, (original, segment) in enumerate(candidates):
         original_pages = format_page_ranges(original.page_numbers())
-        looks_same = same and next(next_answer)
+        same = same_length[index]
+        # .get(index, False): pairs that were not compared count as "not the same".
+        looks_same = answer_of.get(index, False)
         if looks_same:
             segment.export = False
             segment.duplicate_of = original.shown_name

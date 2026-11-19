@@ -9,7 +9,10 @@ below 1.0, a breaking change raises the middle number (0.1 → 0.2).
 **Scanned PDFs are about twice as fast.** The OCR now runs inside
 scoresplit instead of starting the `tesseract` program for every piece of a
 page. Measured on scanned examples: 45% to 55% less CPU time, and the
-results are identical to 0.2.0 (the same parts, page for page).
+same parts as 0.2.0 on every example. With the default languages
+(`eng+hrv`), a few stray OCR characters on a page (in the header or the
+left margin) can read slightly differently than in 0.2.0; on the examples
+this never changed a part.
 
 Nothing to do when you upgrade: the install commands, options, output files
 and exit codes are the same, and the cache from 0.2.0 is still used.

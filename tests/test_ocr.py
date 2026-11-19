@@ -271,6 +271,53 @@ def test_a_list_without_a_folder_finds_nothing(
     assert ocr.tessdata_folder() is None
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        # The program doesn't answer in time.
+        subprocess.TimeoutExpired(["tesseract", "--list-langs"], ocr.LIST_LANGS_TIMEOUT_SECONDS),
+        # The program can't be started at all.
+        PermissionError("permission denied"),
+    ],
+)
+def test_a_tesseract_program_that_fails_finds_nothing(
+    fresh_folder_search, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    monkeypatch.setattr(ocr.shutil, "which", lambda name: "/usr/bin/tesseract")
+    asked_timeouts = []
+
+    def failing_run(command, **kwargs):
+        asked_timeouts.append(kwargs.get("timeout"))
+        raise error
+
+    monkeypatch.setattr(ocr.subprocess, "run", failing_run)
+    # No folder found (and no crash): the caller then says the language
+    # files were not found.
+    assert ocr.tessdata_folder() is None
+    # The program was given a time limit.
+    assert asked_timeouts == [ocr.LIST_LANGS_TIMEOUT_SECONDS]
+
+
+def test_engines_copied_from_a_parent_process_are_kept_not_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pretend this process was forked from a parent that had made an engine:
+    # _engines holds the parent's engine, and _engines_pid is another process.
+    # (monkeypatch puts all three variables back after the test.)
+    parents_engine = object()
+    monkeypatch.setattr(ocr, "_engines", {"eng": parents_engine})
+    monkeypatch.setattr(ocr, "_engines_pid", -1)
+    monkeypatch.setattr(ocr, "_parent_engines", [])
+
+    own_engine = ocr._engine("eng")
+
+    # This process made its own engine...
+    assert own_engine is not parents_engine
+    # ...and kept the parent's copy instead of letting Python free (End()) it.
+    assert ocr._parent_engines == [parents_engine]
+
+
 def test_installed_languages_are_the_traineddata_files(
     fresh_folder_search, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

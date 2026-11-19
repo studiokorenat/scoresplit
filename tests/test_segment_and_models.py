@@ -332,6 +332,18 @@ def test_same_name_parts_are_compared_in_one_call_in_order() -> None:
     assert "different length" in parts[5].notes[-1]
 
 
+def test_too_few_music_answers_is_a_clear_error() -> None:
+    # A comparison callback that answers fewer pairs than it was given must
+    # stop with a clear error, not mark the wrong parts as duplicates.
+    pages = [
+        make_page(1, "Bass", start=True),
+        make_page(2, "Bass", start=True),
+        make_page(3, "Bass", start=True),
+    ]
+    with pytest.raises(ValueError, match="1 answers for 2 comparisons"):
+        build_parts(pages, same_music=lambda pairs: [True])
+
+
 def test_missing_key_is_taken_from_the_previous_number() -> None:
     # "B♭ CLARINET 2" read as "Bo CLARINET 2": the key was lost.
     pages = [

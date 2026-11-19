@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 from scoresplit import page_analyzer
 
 
@@ -67,6 +69,22 @@ def test_worker_lowers_its_priority_and_tesseract_threads(monkeypatch):
     monkeypatch.setattr(page_analyzer, "_worker_pdf", None)
 
 
+def test_worker_uses_the_language_folder_of_the_main_process(monkeypatch):
+    monkeypatch.setattr(os, "nice", lambda increment: None, raising=False)
+    monkeypatch.setattr(page_analyzer, "open_pdf", lambda path: "fake pdf")
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+
+    # No folder found by the main process: nothing is set.
+    page_analyzer._init_worker("score.pdf", None)
+    assert "TESSDATA_PREFIX" not in os.environ
+
+    # A folder found: the worker's OCR looks there (ocr.tessdata_folder
+    # reads TESSDATA_PREFIX first), without running `tesseract` again.
+    page_analyzer._init_worker("score.pdf", "/usr/share/tessdata/")
+    assert os.environ["TESSDATA_PREFIX"] == "/usr/share/tessdata/"
+    monkeypatch.setattr(page_analyzer, "_worker_pdf", None)
+
+
 # ---------------------------------------------------------------------------
 # Music fingerprints in workers (the duplicate-part check)
 # ---------------------------------------------------------------------------
@@ -89,9 +107,13 @@ def _pdf_with_different_pages(path, count: int):
     return path
 
 
-def test_fingerprints_from_workers_match_the_ones_made_here(tmp_path):
+@pytest.mark.parametrize("in_process_max", [0, page_analyzer.FINGERPRINT_IN_PROCESS_MAX_PAGES])
+def test_fingerprints_from_workers_match_the_ones_made_here(tmp_path, monkeypatch, in_process_max):
+    # Run twice: with 0 every page goes to the worker pool; with the real
+    # limit these 3 pages are made in this process. Same answers either way.
     import numpy as np
 
+    monkeypatch.setattr(page_analyzer, "FINGERPRINT_IN_PROCESS_MAX_PAGES", in_process_max)
     pdf_path = _pdf_with_different_pages(tmp_path / "parts.pdf", 4)
     reports = []
     fingerprints = page_analyzer.fingerprint_pages(
@@ -107,6 +129,16 @@ def test_fingerprints_from_workers_match_the_ones_made_here(tmp_path):
     assert sorted(fingerprints) == [2, 3, 4]
     # Counted in pages: a line with the total first, then one per page.
     assert reports == [(0, 3), (1, 3), (2, 3), (3, 3)]
+
+
+def test_a_few_fingerprints_start_no_worker_pool(tmp_path, monkeypatch):
+    def no_pool(*arguments, **keywords):
+        raise AssertionError("a worker pool was started for a few pages")
+
+    monkeypatch.setattr(page_analyzer, "_run_in_workers", no_pool)
+    pdf_path = _pdf_with_different_pages(tmp_path / "parts.pdf", 2)
+    fingerprints = page_analyzer.fingerprint_pages(pdf_path, [1, 2])
+    assert sorted(fingerprints) == [1, 2]
 
 
 def test_no_pages_to_fingerprint_reports_nothing(tmp_path):
