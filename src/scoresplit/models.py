@@ -43,9 +43,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 
 # A progress callback: a function that receives (done, total) and returns
 # nothing, e.g. progress(12, 238) = "12 of 238 pages done". Used by the page
-# analyser (pages) and the exporter (files). It lives here, with the other
-# shapes shared by several modules, so exporter.py can use it without
-# importing the (heavy) page analyser.
+# analyser (pages), the duplicate-part check (pages) and the exporter
+# (files). It lives here, with the other shapes shared by several modules,
+# so exporter.py can use it without importing the (heavy) page analyser.
 ProgressCallback = Callable[[int, int], None]
 
 # ---------------------------------------------------------------------------

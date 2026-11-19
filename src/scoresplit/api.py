@@ -336,6 +336,7 @@ def inspect(
     pdf: Path,
     options: InspectOptions | None = None,
     progress: ProgressCallback | None = None,
+    compare_progress: ProgressCallback | None = None,
 ) -> Result:
     """
     Detect which instrument parts are on which pages. Changes nothing on disk
@@ -346,6 +347,11 @@ def inspect(
         options:  OCR mode, languages, cache, workers (default: InspectOptions()).
         progress: optional function called as progress(pages_done, pages_total)
                   while the pages are analysed (this can take minutes with OCR).
+        compare_progress: optional function called the same way while parts
+                  with the same name are compared, to find copies (pages done,
+                  pages total). Called only when there is something to compare;
+                  it runs after the analysis and can take seconds on a PDF
+                  with many same-name parts.
 
     Raises:
         BadInputError:   the file is missing, isn't a PDF, is damaged or has a
@@ -364,7 +370,12 @@ def inspect(
 
     try:
         result = inspect_pdf(
-            pdf, settings, progress=progress, use_cache=options.use_cache, workers=options.workers
+            pdf,
+            settings,
+            progress=progress,
+            use_cache=options.use_cache,
+            workers=options.workers,
+            compare_progress=compare_progress,
         )
     except pdfium.PdfiumError as error:
         raise _unreadable_pdf(pdf, error) from error

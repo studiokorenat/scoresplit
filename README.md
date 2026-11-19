@@ -414,13 +414,18 @@ One JSON object per line on stderr, sent the moment it happens:
 
 ```json
 {"event": "progress", "stage": "analyse", "done": 12, "total": 238}
+{"event": "progress", "stage": "compare", "done": 30, "total": 118}
 {"event": "progress", "stage": "export", "done": 3, "total": 56}
 ```
 
 `analyse` is the reading of the pages (the slow part: minutes for a large
-scan), `export` the writing of the files (`split --edits` skips the
-analysis). Each stage starts with a line that gives the total. There is no
-final line: the process ending is the signal.
+scan). `compare` follows only when the PDF has several parts with the same
+name: their pages are compared to find copies (counted in pages; a few
+seconds). Most PDFs skip it, so don't wait for it. `export` is the writing
+of the files (`split --edits` skips the analysis and the comparison). The
+stages come in this order, each starts with a line that gives the total,
+and new stages may be added: show an unknown one with a general text.
+There is no final line: the process ending is the signal.
 
 ### The result
 

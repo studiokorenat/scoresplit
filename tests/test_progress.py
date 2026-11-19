@@ -165,6 +165,38 @@ def test_split_without_edits_reports_both_stages(tmp_path: Path) -> None:
     assert stages == sorted(stages)  # "analyse" < "export": no mixing
 
 
+def test_a_later_stage_reports_only_when_it_has_work(capsys) -> None:
+    # The "compare" stage (same-name parts) has a callback on every inspect,
+    # but most PDFs never call it: then not a single line for it appears.
+    stages = (
+        cli._Stage("analyse", "Analysing score.pdf", "pages"),
+        cli._Stage("compare", "Comparing same-name parts", "pages"),
+    )
+    with cli._progress_reporter(cli.ProgressMode.json, *stages) as [analyse, compare]:
+        analyse(0, 2)
+        analyse(2, 2)
+    events = progress_lines(capsys.readouterr().err)
+    assert [event["stage"] for event in events] == ["analyse", "analyse"]
+
+    # When it IS called, its lines carry its own stage name.
+    with cli._progress_reporter(cli.ProgressMode.json, *stages) as [analyse, compare]:
+        analyse(2, 2)
+        compare(0, 118)
+        compare(1, 118)
+    events = progress_lines(capsys.readouterr().err)
+    assert [(event["stage"], event["done"], event["total"]) for event in events] == [
+        ("analyse", 2, 2),
+        ("compare", 0, 118),
+        ("compare", 1, 118),
+    ]
+
+
+def test_progress_none_gives_no_callbacks() -> None:
+    stages = (cli._Stage("analyse", "Analysing", "pages"), cli._Stage("compare", "Comparing", "pages"))
+    with cli._progress_reporter(cli.ProgressMode.none, *stages) as callbacks:
+        assert callbacks == [None, None]
+
+
 # ---------------------------------------------------------------------------
 # export_parts' callback (for Python callers)
 # ---------------------------------------------------------------------------

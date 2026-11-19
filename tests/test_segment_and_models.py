@@ -281,17 +281,55 @@ def test_same_name_but_different_music_is_exported_too() -> None:
         make_page(3, "Bass", start=True),
         make_page(4, "Bass"),
     ]
-    parts, _, _ = build_parts(pages, same_music=lambda a, b: False)
+    parts, _, _ = build_parts(pages, same_music=lambda pairs: [False] * len(pairs))
     assert [(p.name, p.export) for p in parts] == [("Bass", True), ("Bass", True)]
     assert "same name as pages 1-2" in parts[1].notes[-1]
     assert "please rename" in parts[1].notes[-1]
     # ...and when the pages DO look alike, it is a real copy.
-    parts, _, _ = build_parts(pages, same_music=lambda a, b: True)
+    parts, _, _ = build_parts(pages, same_music=lambda pairs: [True] * len(pairs))
     assert [(p.name, p.export, p.duplicate_of) for p in parts] == [
         ("Bass", True, None),
         ("Bass", False, "Bass"),
     ]
     assert parts[1].notes[-1] == "duplicate of 'Bass' (pages 1-2), not exported"
+
+
+def test_same_name_parts_are_compared_in_one_call_in_order() -> None:
+    # Four "Bass" parts and two "Oboe" parts. The comparer gets every
+    # same-length pair in ONE call (so it can prepare all pages in parallel),
+    # and its answers land on the right parts.
+    pages = [
+        make_page(1, "Bass", start=True),
+        make_page(2, "Bass"),
+        make_page(3, "Bass"),
+        make_page(4, "Oboe", start=True),
+        make_page(5, "Bass", start=True),  # copy 1: same music
+        make_page(6, "Bass"),
+        make_page(7, "Bass"),
+        make_page(8, "Bass", start=True),  # copy 2: different music
+        make_page(9, "Bass"),
+        make_page(10, "Bass"),
+        make_page(11, "Oboe", start=True),  # same music as the first Oboe
+        make_page(12, "Bass", start=True),  # copy 3: 2 pages shorter, never compared
+    ]
+    calls = []
+
+    def same_music(pairs: list[tuple[list[int], list[int]]]) -> list[bool]:
+        calls.append(pairs)
+        return [b != [8, 9, 10] for _, b in pairs]
+
+    parts, _, _ = build_parts(pages, same_music=same_music)
+    assert calls == [[([1, 2, 3], [5, 6, 7]), ([1, 2, 3], [8, 9, 10]), ([4], [11])]]
+    assert [(p.pages, p.export) for p in parts] == [
+        ("1-3", True),
+        ("4", True),
+        ("5-7", False),
+        ("8-10", True),
+        ("11", False),
+        ("12", True),
+    ]
+    assert "different music" in parts[3].notes[-1]
+    assert "different length" in parts[5].notes[-1]
 
 
 def test_missing_key_is_taken_from_the_previous_number() -> None:
@@ -376,7 +414,7 @@ def test_a_bass_without_a_key_gets_no_key_and_a_note() -> None:
     # key), so no key is assumed: a person checks it.
     parts, _, _ = build_parts(
         [make_page(1, "Bass", start=True), make_page(2, "Bass", start=True, key="Eb")],
-        same_music=lambda a, b: False,
+        same_music=lambda pairs: [False] * len(pairs),
     )
     assert [p.key for p in parts] == [None, "Eb"]
     assert "key not printed: please check" in parts[0].notes

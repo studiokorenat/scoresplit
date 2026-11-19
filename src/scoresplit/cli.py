@@ -63,8 +63,10 @@ stderr is a terminal and "none" otherwise. A JSON line looks like
 
     {"event": "progress", "stage": "analyse", "done": 12, "total": 238}
 
-with stage "analyse" (pages read, the slow part) or "export" (files
-written). There is no final "done" event: the program ending is the signal.
+with stage "analyse" (pages read, the slow part), "compare" (pages compared
+to find copies among same-name parts; only when there are any) or "export"
+(files written). There is no final "done" event: the program ending is the
+signal.
 """
 
 from __future__ import annotations
@@ -77,12 +79,12 @@ from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import typer
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeRemainingColumn
 
 from . import __version__, api
 
@@ -202,25 +204,37 @@ def _catch_errors(json_output: bool) -> Generator[None, None, None]:
         _fail(f"unexpected error: {type(error).__name__}: {error}", EXIT_ERROR, json_output)
 
 
+class _Stage(NamedTuple):
+    """One stage of the work, as --progress shows it."""
+
+    name: str  # the "stage" in a JSON line: "analyse", "compare" or "export"
+    description: str  # the text in front of the bar: "Analysing score.pdf"
+    unit: str  # what is counted, after the numbers: "pages", "files"
+
+
 @contextmanager
 def _progress_reporter(
-    mode: ProgressMode, stage: str, description: str, unit: str
-) -> Iterator[ProgressCallback | None]:
+    mode: ProgressMode, *stages: _Stage
+) -> Iterator[list[ProgressCallback | None]]:
     """
-    Give a progress callback (done, total) for one stage of the work, shown
-    the way --progress asks. Everything goes to stderr, so it never mixes
-    with the JSON result on stdout.
+    Give one progress callback (done, total) per stage, in the order the
+    stages are given, shown the way --progress asks. Everything goes to
+    stderr, so it never mixes with the JSON result on stdout.
 
-        stage:       the "stage" in a JSON line: "analyse" or "export"
-        description: the text in front of the bar: "Analysing score.pdf"
-        unit:        what is counted, after the numbers: "pages", "files"
+    Use it as:
+        with _progress_reporter(mode, _Stage("export", "Writing", "files")) as [progress]:
+            api.split(..., progress=progress)
 
-    Use it as:   with _progress_reporter(mode, "export", "Writing", "files") as progress:
-                     api.split(..., progress=progress)
+    (`as [progress]` takes the one callback out of the list; with two
+    stages it is `as [first, second]`.)
 
-    It gives None for --progress none, so api functions simply skip
-    reporting. "with" also makes sure a bar is cleaned up when the block
-    ends, also when the work inside raises an error.
+    The first stage's bar is shown at once. A later stage's bar appears on
+    its first report only, so a stage that has no work (no same-name parts
+    to compare) never shows up, in the terminal or in JSON.
+
+    It gives None callbacks for --progress none, so api functions simply
+    skip reporting. "with" also makes sure a bar is cleaned up when the
+    block ends, also when the work inside raises an error.
     """
     if mode is ProgressMode.auto:
         # is_terminal: True when stderr is shown in a terminal, False when
@@ -229,32 +243,59 @@ def _progress_reporter(
 
     if mode is ProgressMode.json:
 
-        def report_json(done: int, total: int) -> None:
-            line = json.dumps({"event": "progress", "stage": stage, "done": done, "total": total})
-            # flush=True sends the line at once, instead of waiting in a
-            # buffer until more output has collected: the program reading
-            # stderr must see each step when it happens.
-            print(line, file=sys.stderr, flush=True)
+        # A small "factory": it makes the callback for ONE stage. (A function
+        # defined straight inside a loop would see only the loop's LAST
+        # stage, because it looks the variable up when it runs, not when it
+        # is made. Passing the stage as an argument fixes it for each.)
+        def json_reporter(stage: _Stage) -> ProgressCallback:
+            def report_json(done: int, total: int) -> None:
+                line = json.dumps(
+                    {"event": "progress", "stage": stage.name, "done": done, "total": total}
+                )
+                # flush=True sends the line at once, instead of waiting in a
+                # buffer until more output has collected: the program reading
+                # stderr must see each step when it happens.
+                print(line, file=sys.stderr, flush=True)
 
-        yield report_json
+            return report_json
+
+        yield [json_reporter(stage) for stage in stages]
     elif mode is ProgressMode.bar:
+        # ONE Progress display for all stages: rich can't show two at once.
+        # Each stage is a "task" (a bar line) in it; task.fields["unit"] is
+        # the extra `unit=` given to add_task.
         with Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
-            TextColumn(f"{{task.completed}}/{{task.total}} {unit}"),
+            TextColumn("{task.completed}/{task.total} {task.fields[unit]}"),
             TimeRemainingColumn(),
             console=stderr,
-            transient=True,  # remove the bar when done
+            transient=True,  # remove the bars when done
         ) as progress_bar:
-            # total=None: the total isn't known yet; the first report gives it.
-            task = progress_bar.add_task(description, total=None)
+            tasks: dict[str, TaskID] = {}  # stage name -> its bar
 
-            def report_bar(done: int, total: int) -> None:
-                progress_bar.update(task, completed=done, total=total)
+            def show(stage: _Stage) -> None:
+                # total=None: the total isn't known yet; the first report gives it.
+                tasks[stage.name] = progress_bar.add_task(
+                    stage.description, total=None, unit=stage.unit
+                )
 
-            yield report_bar
+            # The first stage at once: its first report can take a moment
+            # (reading the whole PDF to recognise it in the cache).
+            if stages:
+                show(stages[0])
+
+            def bar_reporter(stage: _Stage) -> ProgressCallback:  # a factory, as above
+                def report_bar(done: int, total: int) -> None:
+                    if stage.name not in tasks:
+                        show(stage)
+                    progress_bar.update(tasks[stage.name], completed=done, total=total)
+
+                return report_bar
+
+            yield [bar_reporter(stage) for stage in stages]
     else:
-        yield None
+        yield [None for _ in stages]
 
 
 def _run_inspection(
@@ -267,8 +308,13 @@ def _run_inspection(
 ) -> Result:
     """Run api.inspect, showing its progress as --progress asks, and return the Result."""
     options = api.InspectOptions(ocr_mode=ocr.value, lang=lang, use_cache=not no_cache, workers=workers)
-    with _progress_reporter(progress_mode, "analyse", f"Analysing {pdf.name}", "pages") as progress:
-        return api.inspect(pdf, options, progress=progress)
+    stages = (
+        _Stage("analyse", f"Analysing {pdf.name}", "pages"),
+        # Only shown when the PDF has same-name parts (see _progress_reporter).
+        _Stage("compare", "Comparing same-name parts", "pages"),
+    )
+    with _progress_reporter(progress_mode, *stages) as [progress, compare_progress]:
+        return api.inspect(pdf, options, progress=progress, compare_progress=compare_progress)
 
 
 def with_default_command(args: list[str]) -> list[str]:
@@ -534,7 +580,7 @@ def split(
         if yes and not json_output:
             print_result(stdout, result, check.warnings)
 
-        with _progress_reporter(progress, "export", "Writing", "files") as report:
+        with _progress_reporter(progress, _Stage("export", "Writing", "files")) as [report]:
             written = api.split(
                 pdf, result, out, force=force, include_extra=not no_extra, progress=report
             )

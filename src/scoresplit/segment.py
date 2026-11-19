@@ -108,10 +108,13 @@ SCORE_NAME = "Conductor Score"
 # _starts_new_part), and the next named page agrees.
 SAFETY_NET_MIN_SCORE = 90
 
-# A function that answers "do these two page lists hold the same music?"
-# (pipeline.MusicComparer.same_music). Without one (unit tests), same-name
-# parts of the same length count as copies.
-SameMusic = Callable[[list[int], list[int]], bool]
+# A function that answers "do these two page lists hold the same music?" for
+# a whole list of comparisons at once: given [(pages_a, pages_b), ...], it
+# returns [True/False, ...] in the same order
+# (pipeline.MusicComparer.same_music). All at once, so it can prepare every
+# page it needs in parallel. Without one (unit tests), same-name parts of
+# the same length count as copies.
+SameMusic = Callable[[list[tuple[list[int], list[int]]]], list[bool]]
 
 
 @dataclass
@@ -858,35 +861,55 @@ def _handle_same_names(parts: list[Segment], same_music: SameMusic | None = None
     Find copies among parts with the same recognised name and clef (see the
     module docstring). Names are not changed: two parts may share a name,
     and their pages tell them apart.
+
+    Every copy is compared with the group's first part, and only when the
+    lengths match, so no answer depends on another. That lets all the
+    comparisons be listed first and answered in one go (see SameMusic).
     """
-    for group in _same_part_groups(parts):
-        if len(group) < 2:
-            continue
-        original = group[0]
+    # Each copy, with the part it is compared to: (original, copy).
+    candidates = [
+        (group[0], segment)
+        for group in _same_part_groups(parts)
+        for segment in group[1:]  # empty for a group of one: nothing to compare
+    ]
+    same_length = [
+        abs(len(segment.pages) - len(original.pages)) <= DUPLICATE_PAGE_TOLERANCE
+        for original, segment in candidates
+    ]
+
+    # Only same-length pairs are compared, all in one call.
+    # zip() walks both lists side by side: (candidate, its same_length).
+    to_compare = [
+        (original.page_numbers(), segment.page_numbers())
+        for (original, segment), same in zip(candidates, same_length, strict=True)
+        if same
+    ]
+    answers = [True] * len(to_compare) if same_music is None else same_music(to_compare)
+    # iter() + next(): take the answers one by one, in the same order as
+    # the same-length pairs in the loop below.
+    next_answer = iter(answers)
+
+    for (original, segment), same in zip(candidates, same_length, strict=True):
         original_pages = format_page_ranges(original.page_numbers())
-        for segment in group[1:]:
-            same_length = abs(len(segment.pages) - len(original.pages)) <= DUPLICATE_PAGE_TOLERANCE
-            looks_same = same_length and (
-                same_music is None or same_music(original.page_numbers(), segment.page_numbers())
+        looks_same = same and next(next_answer)
+        if looks_same:
+            segment.export = False
+            segment.duplicate_of = original.shown_name
+            segment.notes.append(
+                f"duplicate of '{original.shown_name}' (pages {original_pages}), not exported"
             )
-            if looks_same:
-                segment.export = False
-                segment.duplicate_of = original.shown_name
-                segment.notes.append(
-                    f"duplicate of '{original.shown_name}' (pages {original_pages}), not exported"
-                )
-            elif same_length:
-                # Same name and length, but different notes: a different part
-                # whose distinguishing word (key, clef, number) wasn't read.
-                # Better one PDF too many than a part silently missing.
-                segment.notes.append(
-                    f"same name as pages {original_pages} but different music "
-                    "(another key or clef?): please rename"
-                )
-            else:
-                segment.notes.append(
-                    f"same name as pages {original_pages} but a different length: please check"
-                )
+        elif same:
+            # Same name and length, but different notes: a different part
+            # whose distinguishing word (key, clef, number) wasn't read.
+            # Better one PDF too many than a part silently missing.
+            segment.notes.append(
+                f"same name as pages {original_pages} but different music "
+                "(another key or clef?): please rename"
+            )
+        else:
+            segment.notes.append(
+                f"same name as pages {original_pages} but a different length: please check"
+            )
 
 
 def _printed_name(segment: Segment) -> str | None:

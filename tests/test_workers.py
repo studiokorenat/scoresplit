@@ -65,3 +65,74 @@ def test_worker_lowers_its_priority_and_tesseract_threads(monkeypatch):
     assert os.environ["OMP_THREAD_LIMIT"] == "1"
     # Put the module's global back as it was (the real workers set it).
     monkeypatch.setattr(page_analyzer, "_worker_pdf", None)
+
+
+# ---------------------------------------------------------------------------
+# Music fingerprints in workers (the duplicate-part check)
+# ---------------------------------------------------------------------------
+
+
+def _pdf_with_different_pages(path, count: int):
+    """Helper: a PDF whose pages each hold a different pattern of black blocks."""
+    import numpy as np
+    from PIL import Image
+
+    pictures = []
+    for seed in range(count):
+        rng = np.random.default_rng(seed)
+        gray = np.full((1100, 850), 255, dtype=np.uint8)  # 8.5 x 11 inch at 100 dpi
+        for x, y in zip(rng.integers(50, 750, 40), rng.integers(50, 1000, 40), strict=True):
+            gray[y : y + 20, x : x + 30] = 0
+        pictures.append(Image.fromarray(gray))
+    # PIL writes a multi-page PDF: the first picture, then the others.
+    pictures[0].save(path, save_all=True, append_images=pictures[1:], resolution=100)
+    return path
+
+
+def test_fingerprints_from_workers_match_the_ones_made_here(tmp_path):
+    import numpy as np
+
+    pdf_path = _pdf_with_different_pages(tmp_path / "parts.pdf", 4)
+    reports = []
+    fingerprints = page_analyzer.fingerprint_pages(
+        pdf_path, [4, 2, 3], progress=lambda done, total: reports.append((done, total)), workers=2
+    )
+    # Each page's own fingerprint (not another page's), the same as without workers.
+    pdf = page_analyzer.open_pdf(str(pdf_path))
+    try:
+        for number in (2, 3, 4):
+            assert np.array_equal(fingerprints[number], page_analyzer.page_fingerprint(pdf, number))
+    finally:
+        pdf.close()
+    assert sorted(fingerprints) == [2, 3, 4]
+    # Counted in pages: a line with the total first, then one per page.
+    assert reports == [(0, 3), (1, 3), (2, 3), (3, 3)]
+
+
+def test_no_pages_to_fingerprint_reports_nothing(tmp_path):
+    reports = []
+    fingerprints = page_analyzer.fingerprint_pages(
+        tmp_path / "never-opened.pdf", [], progress=lambda done, total: reports.append((done, total))
+    )
+    assert fingerprints == {}
+    assert reports == []  # no "0/0" stage
+
+
+def test_music_comparer_fingerprints_each_needed_page_once(monkeypatch, tmp_path):
+    import numpy as np
+
+    from scoresplit import pipeline
+
+    asked = []
+
+    def fake_fingerprint_pages(pdf_path, page_numbers, progress, workers):
+        asked.append(page_numbers)
+        # Pages 1-4 look alike, page 9 is different.
+        return {n: np.eye(8) if n != 9 else np.ones((8, 8)) - np.eye(8) for n in page_numbers}
+
+    monkeypatch.setattr(pipeline, "fingerprint_pages", fake_fingerprint_pages)
+    comparer = pipeline.MusicComparer(tmp_path / "x.pdf")
+    # Only the first DUPLICATE_PAGES_COMPARED (2) pages of each part count.
+    answers = comparer.same_music([([1, 2, 5], [3, 4, 6]), ([1, 2], [9, 4])])
+    assert answers == [True, False]
+    assert asked == [[1, 2, 3, 4, 9]]  # one call, every page once, in order

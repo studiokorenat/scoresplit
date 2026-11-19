@@ -19,15 +19,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-
 from .cache import file_sha256
 from .classify import classify_page, fix_clef_sign_numbers, mark_title_pages
-from .image_analysis import deskew, music_fingerprint, music_similarity
+from .image_analysis import music_similarity
 from .metadata import extract_metadata
 from .models import PageFacts, PageInfo, Result
-from .page_analyzer import DEFAULT_DPI, AnalysisSettings, ProgressCallback, analyze_document
-from .pdf_reader import fit_dpi, open_pdf, render_page_gray
+from .page_analyzer import AnalysisSettings, ProgressCallback, analyze_document, fingerprint_pages
 from .segment import build_parts
 
 # Two same-name parts are copies of each other only when their pages look
@@ -48,34 +45,46 @@ FILL_CREDITS_MIN_PAGES = 3
 class MusicComparer:
     """
     Answers "do these two lists of pages contain the same music?" by looking
-    at the pixels. Pages are rendered only when asked (a duplicate candidate
-    is rare), and each page only once.
+    at the pixels, for all same-name parts of a PDF at once (see
+    segment.SameMusic).
+
+    Pages are rendered only when asked (a duplicate candidate is rare). A PDF
+    with many same-name parts needs many pages, so their fingerprints are
+    made in parallel (page_analyzer.fingerprint_pages), reported as the
+    "compare" stage through `progress(pages_done, pages_total)`.
     """
 
-    def __init__(self, pdf_path: Path) -> None:
+    def __init__(
+        self,
+        pdf_path: Path,
+        progress: ProgressCallback | None = None,
+        workers: int | None = None,
+    ) -> None:
         self.pdf_path = pdf_path
-        self.fingerprints: dict[int, np.ndarray] = {}  # page number -> fingerprint
+        self.progress = progress
+        self.workers = workers
 
-    def _fingerprint(self, page_number: int) -> np.ndarray:
-        if page_number not in self.fingerprints:
-            pdf = open_pdf(str(self.pdf_path))
-            try:
-                page = pdf[page_number - 1]
-                width, height = page.get_size()
-                gray = render_page_gray(page, fit_dpi(width, height, DEFAULT_DPI))
-                self.fingerprints[page_number] = music_fingerprint(deskew(gray))
-            finally:
-                pdf.close()
-        return self.fingerprints[page_number]
-
-    def same_music(self, pages_a: list[int], pages_b: list[int]) -> bool:
-        """True if the first pages of both parts look like copies of each other."""
+    def same_music(self, comparisons: list[tuple[list[int], list[int]]]) -> list[bool]:
+        """
+        For each (pages_a, pages_b): True if the first pages of both parts
+        look like copies of each other (page 1 with page 1, ...).
+        """
         # zip() stops at the shorter list; [:N] = the first N pairs.
-        pairs = list(zip(pages_a, pages_b, strict=False))[:DUPLICATE_PAGES_COMPARED]
-        return all(
-            music_similarity(self._fingerprint(a), self._fingerprint(b)) >= DUPLICATE_MIN_SIMILARITY
-            for a, b in pairs
-        )
+        pairs_of = [
+            list(zip(pages_a, pages_b, strict=False))[:DUPLICATE_PAGES_COMPARED]
+            for pages_a, pages_b in comparisons
+        ]
+        # Every page any comparison needs, each once ({...} is a set: no
+        # repeats), fingerprinted in one go.
+        needed = sorted({page for pairs in pairs_of for pair in pairs for page in pair})
+        fingerprints = fingerprint_pages(self.pdf_path, needed, self.progress, self.workers)
+        return [
+            all(
+                music_similarity(fingerprints[a], fingerprints[b]) >= DUPLICATE_MIN_SIMILARITY
+                for a, b in pairs
+            )
+            for pairs in pairs_of
+        ]
 
 
 def read_credits(facts: list[PageFacts], infos: list[PageInfo]) -> dict[str, str | None]:
@@ -128,6 +137,7 @@ def inspect_pdf(
     progress: ProgressCallback | None = None,
     use_cache: bool = True,
     workers: int | None = None,
+    compare_progress: ProgressCallback | None = None,
 ) -> Result:
     """
     Analyse a PDF and return the detected parts as a Result.
@@ -138,6 +148,9 @@ def inspect_pdf(
         progress:  optional function called as progress(done, total).
         use_cache: reuse/save page facts in ~/.cache/scoresplit.
         workers:   number of parallel processes (default: half the CPU cores).
+        compare_progress: optional function called as compare_progress(done,
+                   total) while same-name parts are compared (pages); never
+                   called when there is nothing to compare.
     """
     sha256 = file_sha256(pdf_path)
     facts = analyze_document(pdf_path, sha256, settings, progress, use_cache, workers)
@@ -154,7 +167,9 @@ def inspect_pdf(
 
     # Same-name parts are only marked as duplicates when their pages really
     # look alike (otherwise, e.g. "Bass" in Eb and in Bb, both are exported).
-    parts, extras, warnings = build_parts(infos, MusicComparer(pdf_path).same_music)
+    parts, extras, warnings = build_parts(
+        infos, MusicComparer(pdf_path, compare_progress, workers).same_music
+    )
 
     if not meta["title"]:
         warnings.append("title not found: using the file name")

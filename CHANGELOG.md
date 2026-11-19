@@ -16,6 +16,15 @@ and exit codes are the same, and the cache from 0.2.0 is still used.
 
 ### Changed
 
+- **No more long pause after reading a PDF with many same-name parts.**
+  Finding which parts are copies of each other compares their pages; this
+  now runs on several CPU cores and needs about half the CPU, with the
+  same answers. italiano.pdf (38 comparisons, 118 pages): 40 s → 9 s.
+- A progress bar "Comparing same-name parts" (and a new `--progress json`
+  stage `compare`) shows that comparison. It appears only when there is
+  something to compare.
+- Every page's tilt is measured about twice as fast (the same result), so
+  every PDF needs a little less CPU.
 - **The OCR engine comes with scoresplit**: the `tesserocr` package (it
   replaces `pytesseract`), which bundles Tesseract 5.5.4. The system's
   Tesseract package still provides the language files; scoresplit asks the

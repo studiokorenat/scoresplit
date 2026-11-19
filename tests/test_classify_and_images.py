@@ -14,9 +14,14 @@ from scoresplit.classify import classify_page, fix_clef_sign_numbers, is_sentenc
 from scoresplit.image_analysis import (
     INK_THRESHOLD,
     LIGHT_SCAN_INK_THRESHOLD,
+    DESKEW_MAX_SLOPE,
+    DESKEW_SLOPE_STEP,
+    DESKEW_STRIPS,
+    DESKEW_X_RANGE,
     _long_horizontal_runs,
     _staff_start,
     detect_clef,
+    estimate_skew_slope,
     find_staves,
     find_staves_on_page,
     music_fingerprint,
@@ -71,6 +76,80 @@ def test_long_horizontal_runs_finds_lines_not_notes() -> None:
     runs = _long_horizontal_runs(ink, 60)
     assert runs[1, 5:95].all() and not runs[1, :5].any()
     assert not runs[3].any()
+
+
+def _long_runs_reference(ink: np.ndarray, length: int) -> np.ndarray:
+    """
+    The plain, slow way to find long horizontal runs: walk every row pixel
+    by pixel. _long_horizontal_runs must give exactly this, only faster.
+    """
+    runs = np.zeros_like(ink)
+    for y in range(ink.shape[0]):
+        x = 0
+        while x < ink.shape[1]:
+            if not ink[y, x]:
+                x += 1
+                continue
+            end = x
+            while end < ink.shape[1] and ink[y, end]:
+                end += 1  # `end` is the first pixel after this run
+            if end - x >= length:
+                runs[y, x:end] = True
+            x = end
+    return runs
+
+
+def test_long_horizontal_runs_matches_the_plain_version() -> None:
+    rng = np.random.default_rng(7)
+    # Mostly ink, so long runs happen; several widths, also exactly
+    # `length` wide, one less (no run fits), and the edges of every image.
+    for width in (59, 60, 61, 97, 250):
+        for density in (0.5, 0.97, 1.0):
+            ink = rng.random((12, width)) < density
+            assert np.array_equal(_long_horizontal_runs(ink, 60), _long_runs_reference(ink, 60))
+
+
+def _skew_slope_reference(gray: np.ndarray) -> float:
+    """
+    estimate_skew_slope as it was before it skipped repeated work (0.2.0):
+    every slope scored. The faster version must pick exactly this slope.
+    """
+    ink = gray < INK_THRESHOLD
+    width = ink.shape[1]
+    left, right = int(width * DESKEW_X_RANGE[0]), int(width * DESKEW_X_RANGE[1])
+    edges = np.linspace(left, right, DESKEW_STRIPS + 1).astype(int)
+    profiles = [ink[:, a:b].mean(axis=1) for a, b in zip(edges[:-1], edges[1:], strict=True)]
+    centres = (edges[:-1] + edges[1:]) / 2 - left
+    best_score, best_slope = -1.0, 0.0
+    for slope in np.arange(-DESKEW_MAX_SLOPE, DESKEW_MAX_SLOPE + DESKEW_SLOPE_STEP / 2, DESKEW_SLOPE_STEP):
+        combined = sum(
+            np.roll(profile, -int(round(slope * centre)))
+            for profile, centre in zip(profiles, centres, strict=True)
+        )
+        score = float((combined**2).sum())
+        if score > best_score:
+            best_score, best_slope = score, float(slope)
+    return best_slope
+
+
+def _tilted_staves(slope: float, seed: int) -> np.ndarray:
+    """A page with staff lines drawn at `slope` (rows down per column), plus noise."""
+    rng = np.random.default_rng(seed)
+    gray = np.full((700, 900), 255, dtype=np.uint8)
+    columns = np.arange(40, 860)
+    for staff_top in range(80, 640, 110):
+        for line in range(5):
+            rows = staff_top + line * 10 + np.round(slope * columns).astype(int)
+            gray[rows, columns] = 0
+    gray[rng.random(gray.shape) < 0.01] = 0  # specks, like a scan
+    return gray
+
+
+def test_skew_slope_matches_every_slope_scored() -> None:
+    pages = [_tilted_staves(slope, seed) for seed, slope in enumerate((-0.03, -0.004, 0.0, 0.0017, 0.021))]
+    pages.append(np.full((300, 400), 255, dtype=np.uint8))  # blank: every slope ties
+    for gray in pages:
+        assert estimate_skew_slope(gray) == _skew_slope_reference(gray)
 
 
 def test_staff_start_skips_a_thin_vertical_line() -> None:
